@@ -78,7 +78,12 @@ fun DaysQuestionScreen(
                     // Red calendar icon
                     Box(
                         modifier = Modifier
-                            .size(72.dp)
+                            .size(76.dp)
+                            .shadow(
+                                elevation = 2.dp,
+                                shape = RoundedCornerShape(18.dp),
+                                spotColor = Color.Black.copy(alpha = 0.1f)
+                            )
                             .background(Color(0xFFE53935), RoundedCornerShape(18.dp)),
                         contentAlignment = Alignment.Center
                     ) {
@@ -88,18 +93,18 @@ fun DaysQuestionScreen(
                         ) {
                             Text(
                                 "JUL",
-                                fontSize = 13.sp,
+                                fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
-                                lineHeight = 16.sp
+                                lineHeight = 18.sp
                             )
-                            Spacer(modifier = Modifier.height(2.dp))
+                            Spacer(modifier = Modifier.height(3.dp))
                             Text(
                                 "17",
-                                fontSize = 24.sp,
+                                fontSize = 26.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
-                                lineHeight = 28.sp
+                                lineHeight = 30.sp
                             )
                         }
                     }
@@ -147,7 +152,7 @@ fun DaysQuestionScreen(
                             RoundedCornerShape(20.dp)
                         )
                         .clickable { selectedDays = option.value }
-                        .padding(22.dp)
+                        .padding(24.dp)
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -158,22 +163,22 @@ fun DaysQuestionScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text(option.emoji, fontSize = 40.sp)
-                            Spacer(modifier = Modifier.width(18.dp))
+                            Text(option.emoji, fontSize = 44.sp)
+                            Spacer(modifier = Modifier.width(20.dp))
                             Column {
                                 Text(
                                     text = option.label,
-                                    fontSize = 19.sp,
+                                    fontSize = 20.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFF2D3748),
-                                    lineHeight = 24.sp
+                                    lineHeight = 26.sp
                                 )
-                                Spacer(modifier = Modifier.height(6.dp))
+                                Spacer(modifier = Modifier.height(8.dp))
                                 Text(
                                     text = option.description,
-                                    fontSize = 14.sp,
+                                    fontSize = 15.sp,
                                     color = Color(0xFF4A5568),
-                                    lineHeight = 20.sp
+                                    lineHeight = 22.sp
                                 )
                             }
                         }
@@ -183,13 +188,13 @@ fun DaysQuestionScreen(
                                 imageVector = Icons.Default.CheckCircle,
                                 contentDescription = "Selected",
                                 tint = Color(0xFF22C55E),
-                                modifier = Modifier.size(30.dp)
+                                modifier = Modifier.size(32.dp)
                             )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(18.dp))
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -204,18 +209,18 @@ fun DaysQuestionScreen(
                         spotColor = Color.Black.copy(alpha = 0.05f)
                     )
                     .background(Color(0xFFFFEAD6), RoundedCornerShape(18.dp))
-                    .padding(20.dp)
+                    .padding(22.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.Top
                 ) {
-                    Text("💡", fontSize = 28.sp)
-                    Spacer(modifier = Modifier.width(14.dp))
+                    Text("💡", fontSize = 30.sp)
+                    Spacer(modifier = Modifier.width(16.dp))
                     Text(
                         text = "Tip: The duration of symptoms helps in better diagnosis and treatment recommendations.",
-                        fontSize = 14.sp,
+                        fontSize = 15.sp,
                         color = Color(0xFF2D3748),
-                        lineHeight = 22.sp,
+                        lineHeight = 24.sp,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -229,7 +234,7 @@ fun DaysQuestionScreen(
                 enabled = selectedDays.isNotEmpty(),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp)
+                    .height(58.dp)
                     .shadow(
                         elevation = if (selectedDays.isNotEmpty()) 4.dp else 0.dp,
                         shape = RoundedCornerShape(20.dp),
@@ -245,7 +250,7 @@ fun DaysQuestionScreen(
             ) {
                 Text(
                     text = "Continue to Diagnosis",
-                    fontSize = 16.sp,
+                    fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold
                 )
             }

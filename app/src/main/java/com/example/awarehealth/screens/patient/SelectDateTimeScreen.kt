@@ -7,10 +7,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -53,54 +56,49 @@ fun SelectDateTimeScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFFFFFDF7))
-            .verticalScroll(rememberScrollState())
     ) {
+        // Header is handled in NavGraph
 
-        /* ---------- HEADER ---------- */
-        Row(
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp, vertical = 20.dp)
         ) {
-            Text(
-                text = "←",
-                fontSize = 24.sp,
-                modifier = Modifier.clickable { onBack() }
-            )
-        }
-
-        Column(modifier = Modifier.padding(horizontal = 24.dp)) {
-
-            /* ---------- TITLE ---------- */
+            /* ---------- TITLE SECTION ---------- */
             Text(
                 text = "Select Date & Time",
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color(0xFF2D3748)
+                fontSize = 32.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF2D3748),
+                lineHeight = 38.sp
             )
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "Booking with ${selectedDoctor?.name ?: ""}",
-                color = Color(0xFF718096)
+                text = "Booking with ${selectedDoctor?.name ?: "Doctor"}",
+                fontSize = 15.sp,
+                color = Color(0xFF718096),
+                lineHeight = 22.sp
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(28.dp))
 
             /* ---------- DATE SELECTION ---------- */
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("📅", fontSize = 18.sp)
-                Spacer(modifier = Modifier.width(8.dp))
+                Text("📅", fontSize = 22.sp)
+                Spacer(modifier = Modifier.width(10.dp))
                 Text(
                     text = "Select Date",
-                    fontSize = 18.sp,
-                    color = Color(0xFF2D3748)
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF2D3748),
+                    lineHeight = 26.sp
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             Row(
                 modifier = Modifier
@@ -110,29 +108,43 @@ fun SelectDateTimeScreen(
                 dates.forEach { (date, day, num) ->
                     Box(
                         modifier = Modifier
-                            .width(80.dp)
+                            .width(88.dp)
+                            .shadow(
+                                elevation = if (selectedDate == date) 4.dp else 2.dp,
+                                shape = RoundedCornerShape(20.dp),
+                                spotColor = Color.Black.copy(alpha = if (selectedDate == date) 0.12f else 0.05f)
+                            )
                             .background(
                                 if (selectedDate == date)
                                     Color(0xFFAEE4C1)
                                 else
-                                    Color(0xFFF3F3F3),
+                                    Color.White,
                                 RoundedCornerShape(20.dp)
                             )
                             .clickable { selectedDate = date }
-                            .padding(16.dp)
+                            .padding(vertical = 18.dp, horizontal = 16.dp)
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(day, fontSize = 13.sp, color = Color(0xFF4A5568))
-                            Spacer(modifier = Modifier.height(4.dp))
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
                             Text(
-                                num,
-                                fontSize = 22.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = Color(0xFF2D3748)
+                                text = day,
+                                fontSize = 14.sp,
+                                color = Color(0xFF4A5568),
+                                lineHeight = 20.sp
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = num,
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF2D3748),
+                                lineHeight = 30.sp
                             )
                         }
                     }
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(14.dp))
                 }
             }
 
@@ -140,45 +152,53 @@ fun SelectDateTimeScreen(
 
             /* ---------- TIME SELECTION ---------- */
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("⏰", fontSize = 18.sp)
-                Spacer(modifier = Modifier.width(8.dp))
+                Text("⏰", fontSize = 22.sp)
+                Spacer(modifier = Modifier.width(10.dp))
                 Text(
                     text = "Select Time",
-                    fontSize = 18.sp,
-                    color = Color(0xFF2D3748)
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF2D3748),
+                    lineHeight = 26.sp
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             Column {
                 timeSlots.chunked(3).forEach { row ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         row.forEach { time ->
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
+                                    .shadow(
+                                        elevation = if (selectedTime == time) 4.dp else 2.dp,
+                                        shape = RoundedCornerShape(16.dp),
+                                        spotColor = Color.Black.copy(alpha = if (selectedTime == time) 0.12f else 0.05f)
+                                    )
                                     .background(
                                         if (selectedTime == time)
                                             Color(0xFFAEE4C1)
                                         else
-                                            Color(0xFFF3F3F3),
-                                        RoundedCornerShape(20.dp)
+                                            Color.White,
+                                        RoundedCornerShape(16.dp)
                                     )
                                     .clickable { selectedTime = time }
-                                    .padding(vertical = 12.dp),
+                                    .padding(vertical = 16.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
                                     text = time,
-                                    fontSize = 14.sp,
-                                    color = Color(0xFF2D3748)
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color(0xFF2D3748),
+                                    lineHeight = 22.sp
                                 )
                             }
-                            Spacer(modifier = Modifier.width(12.dp))
                         }
                         if (row.size < 3) {
                             repeat(3 - row.size) {
@@ -186,39 +206,49 @@ fun SelectDateTimeScreen(
                             }
                         }
                     }
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
                 }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(36.dp))
 
             /* ---------- CONTINUE BUTTON ---------- */
-            Box(
+            Button(
+                onClick = {
+                    if (selectedDate.isNotEmpty() && selectedTime.isNotEmpty()) {
+                        onContinue(
+                            SelectedDateTime(
+                                date = selectedDate,
+                                time = selectedTime
+                            )
+                        )
+                    }
+                },
+                enabled = selectedDate.isNotEmpty() && selectedTime.isNotEmpty(),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFFAEE4C1), RoundedCornerShape(20.dp))
-                    .clickable {
-                        if (selectedDate.isNotEmpty() && selectedTime.isNotEmpty()) {
-                            onContinue(
-                                SelectedDateTime(
-                                    date = selectedDate,
-                                    time = selectedTime
-                                )
-                            )
-                        }
-                    }
-                    .padding(vertical = 16.dp),
-                contentAlignment = Alignment.Center
+                    .height(56.dp)
+                    .shadow(
+                        elevation = if (selectedDate.isNotEmpty() && selectedTime.isNotEmpty()) 4.dp else 0.dp,
+                        shape = RoundedCornerShape(20.dp),
+                        spotColor = Color.Black.copy(alpha = 0.1f)
+                    ),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFAEE4C1),
+                    disabledContainerColor = Color(0xFFE2E8F0),
+                    contentColor = Color(0xFF2D3748),
+                    disabledContentColor = Color(0xFF718096)
+                ),
+                shape = RoundedCornerShape(20.dp)
             ) {
                 Text(
                     text = "Continue",
                     fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color(0xFF2D3748)
+                    fontWeight = FontWeight.SemiBold
                 )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
         }
     }
 }

@@ -3,14 +3,15 @@ package com.example.awarehealth.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -66,7 +67,7 @@ fun SelectDoctorScreen(
             rating = 4.7,
             availability = "Available Today",
             location = "Children's Hospital",
-            color = Color(0xFFF3F3F3)
+            color = Color(0xFFFFEAD6) // Light orange/peach
         ),
         Doctor(
             id = "4",
@@ -76,7 +77,7 @@ fun SelectDoctorScreen(
             rating = 4.9,
             availability = "Next Week",
             location = "Bone & Joint Clinic",
-            color = Color(0xFFAEE4C1)
+            color = Color(0xFFE9FFF4) // Light green
         )
     )
 
@@ -84,52 +85,45 @@ fun SelectDoctorScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFFFFFDF7))
-            .verticalScroll(rememberScrollState())
     ) {
+        // Header is handled in NavGraph
 
-        /* ---------- HEADER (BACK) ---------- */
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            Text(
-                text = "←",
-                fontSize = 24.sp,
-                modifier = Modifier.clickable { onBack() }
-            )
-        }
-
-        Column(modifier = Modifier.padding(horizontal = 24.dp)) {
-
-            /* ---------- TITLE ---------- */
-            Text(
-                text = "Select Doctor",
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color(0xFF2D3748)
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Text(
-                text = "Choose a specialist for your appointment",
-                color = Color(0xFF718096)
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
+            /* ---------- TITLE SECTION ---------- */
+            item {
+                Column {
+                    Text(
+                        text = "Select Doctor",
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF2D3748),
+                        lineHeight = 38.sp
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Choose a specialist for your appointment",
+                        fontSize = 15.sp,
+                        color = Color(0xFF718096),
+                        lineHeight = 22.sp
+                    )
+                }
+            }
 
             /* ---------- DOCTOR LIST ---------- */
-            doctors.forEach { doctor ->
+            items(doctors) { doctor ->
                 DoctorCard(
                     doctor = doctor,
                     onClick = { onDoctorSelected(doctor) }
                 )
-                Spacer(modifier = Modifier.height(16.dp))
             }
-
-            Spacer(modifier = Modifier.height(24.dp))
+            
+            item {
+                Spacer(modifier = Modifier.height(20.dp))
+            }
         }
     }
 }
@@ -144,70 +138,85 @@ fun DoctorCard(
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .shadow(
+                elevation = 2.dp,
+                shape = RoundedCornerShape(20.dp),
+                spotColor = Color.Black.copy(alpha = 0.05f)
+            )
             .background(doctor.color, RoundedCornerShape(20.dp))
             .clickable { onClick() }
-            .padding(20.dp)
+            .padding(22.dp)
     ) {
-        Row {
-
-            /* Avatar */
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            /* Avatar with light green background */
             Box(
                 modifier = Modifier
-                    .size(64.dp)
-                    .background(Color(0xFFFFFDF7), CircleShape),
+                    .size(72.dp)
+                    .background(Color(0xFFE9FFF4), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Text("🩺", fontSize = 26.sp)
+                Text("🩺", fontSize = 32.sp)
             }
 
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.width(18.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-
+                // Doctor Name
                 Text(
                     text = doctor.name,
-                    fontSize = 18.sp,
-                    color = Color(0xFF2D3748)
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF2D3748),
+                    lineHeight = 26.sp
                 )
 
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
+                // Specialty and Experience
                 Text(
                     text = "${doctor.specialty} • ${doctor.experience}",
-                    fontSize = 14.sp,
-                    color = Color(0xFF4A5568)
+                    fontSize = 15.sp,
+                    color = Color(0xFF4A5568),
+                    lineHeight = 22.sp
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("⭐", fontSize = 14.sp)
-                    Spacer(modifier = Modifier.width(4.dp))
+                // Rating and Location Row
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("⭐", fontSize = 16.sp)
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = doctor.rating.toString(),
-                        color = Color(0xFF2D3748),
-                        fontSize = 14.sp
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFF2D3748)
                     )
 
-                    Spacer(modifier = Modifier.width(16.dp))
+                    Spacer(modifier = Modifier.width(18.dp))
 
-                    Text("📍", fontSize = 14.sp)
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("📍", fontSize = 16.sp)
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = doctor.location,
-                        fontSize = 14.sp,
+                        fontSize = 15.sp,
                         color = Color(0xFF4A5568)
                     )
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
+                // Availability Row
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("⏰", fontSize = 14.sp)
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("⏰", fontSize = 16.sp)
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = doctor.availability,
-                        fontSize = 14.sp,
+                        fontSize = 15.sp,
                         color = Color(0xFF4A5568)
                     )
                 }
