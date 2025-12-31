@@ -3,7 +3,6 @@ package com.example.awarehealth.ui.screens
 /* ---------- IMPORTS ---------- */
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -20,35 +19,51 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip   // ✅ FIXED
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.awarehealth.data.AppRepository
+import com.example.awarehealth.viewmodel.AuthViewModel
 
 /* ---------- SCREEN ---------- */
 
 @Composable
 fun LoginScreen(
+    repository: AppRepository,
     userType: String,
-    onLoginSuccess: () -> Unit,
+    onLoginSuccess: (com.example.awarehealth.data.UserData) -> Unit,
     onRegister: () -> Unit,
     onForgotPassword: () -> Unit,
-    onGoogleLogin: () -> Unit,
     onBack: () -> Unit = {}
 ) {
-
+    // Initialize ViewModel
+    val viewModel: AuthViewModel = remember { AuthViewModel(repository) }
+    val uiState by viewModel.uiState.collectAsState()
+    
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var isLoading by remember { mutableStateOf(false) }
 
     // Handle back button
     BackHandler {
         onBack()
+    }
+    
+    // Observe UI state changes
+    LaunchedEffect(uiState) {
+        isLoading = uiState.isLoading
+        uiState.error?.let {
+            errorMessage = it
+            viewModel.clearError()
+        }
+        if (uiState.isSuccess && uiState.user != null) {
+            onLoginSuccess(uiState.user!!)
+        }
     }
 
     Column(
@@ -241,15 +256,40 @@ fun LoginScreen(
             fontWeight = FontWeight.Medium
         )
 
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(20.dp))
+        
+        /* ---------- ERROR MESSAGE ---------- */
+        errorMessage?.let { error ->
+            Text(
+                text = error,
+                color = Color(0xFFE53E3E),
+                fontSize = 14.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp, vertical = 8.dp)
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(12.dp))
 
         /* ---------- SIGN IN BUTTON ---------- */
-        val isLoginEnabled = email.isNotBlank() && password.isNotBlank()
+        val isLoginEnabled = email.isNotBlank() && password.isNotBlank() && !isLoading
         
         Button(
             onClick = {
                 if (isLoginEnabled) {
-                    onLoginSuccess()
+                    errorMessage = null
+                    viewModel.login(
+                        email = email,
+                        password = password,
+                        userType = userType,
+                        onSuccess = { user ->
+                            // Navigation handled in LaunchedEffect
+                        },
+                        onError = { error ->
+                            errorMessage = error
+                        }
+                    )
                 }
             },
             enabled = isLoginEnabled,
@@ -269,71 +309,20 @@ fun LoginScreen(
                 disabledContentColor = Color(0xFFA0AEC0)
             )
         ) {
-            Text(
-                "Sign In", 
-                fontSize = 17.sp, 
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = 0.5.sp
-            )
-        }
-
-        Spacer(modifier = Modifier.height(28.dp))
-
-        /* ---------- OR ---------- */
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Divider(
-                modifier = Modifier.weight(1f),
-                color = Color(0xFFE2E8F0),
-                thickness = 1.dp
-            )
-            Text(
-                "  OR  ", 
-                color = Color(0xFF718096),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium
-            )
-            Divider(
-                modifier = Modifier.weight(1f),
-                color = Color(0xFFE2E8F0),
-                thickness = 1.dp
-            )
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        /* ---------- GOOGLE SIGN IN ---------- */
-        OutlinedButton(
-            onClick = onGoogleLogin,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)
-                .shadow(
-                    elevation = 2.dp,
-                    shape = RoundedCornerShape(20.dp),
-                    spotColor = Color.Black.copy(alpha = 0.05f)
-                ),
-            shape = RoundedCornerShape(20.dp),
-            colors = ButtonDefaults.outlinedButtonColors(
-                contentColor = Color(0xFF2D3748),
-                containerColor = Color.White
-            ),
-            border = androidx.compose.foundation.BorderStroke(
-                width = 1.5.dp,
-                color = Color(0xFFE2E8F0)
-            )
-        ) {
-            // Google logo
-            GoogleLogo(size = 22.dp)
-            Spacer(modifier = Modifier.width(14.dp))
-            Text(
-                "Sign in with Google", 
-                fontSize = 16.sp, 
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = 0.3.sp
-            )
+            if (isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp),
+                    color = Color(0xFF2D3748),
+                    strokeWidth = 2.dp
+                )
+            } else {
+                Text(
+                    "Sign In", 
+                    fontSize = 17.sp, 
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.5.sp
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(28.dp))
@@ -362,65 +351,3 @@ fun LoginScreen(
     }
 }
 
-@Composable
-fun GoogleLogo(size: androidx.compose.ui.unit.Dp = 20.dp) {
-    Canvas(modifier = Modifier.size(size)) {
-        val canvasSize = size.toPx()
-        val center = Offset(canvasSize / 2, canvasSize / 2)
-        val radius = canvasSize * 0.4f
-        val strokeWidth = canvasSize * 0.15f
-
-        // Google "G" logo - simplified version with colored arcs
-        // Blue arc (top right)
-        drawArc(
-            color = Color(0xFF4285F4),
-            startAngle = -45f,
-            sweepAngle = 270f,
-            useCenter = false,
-            topLeft = Offset(center.x - radius, center.y - radius),
-            size = androidx.compose.ui.geometry.Size(radius * 2, radius * 2),
-            style = Stroke(width = strokeWidth)
-        )
-        
-        // Red arc (top left)
-        drawArc(
-            color = Color(0xFFEA4335),
-            startAngle = 135f,
-            sweepAngle = 90f,
-            useCenter = false,
-            topLeft = Offset(center.x - radius, center.y - radius),
-            size = androidx.compose.ui.geometry.Size(radius * 2, radius * 2),
-            style = Stroke(width = strokeWidth)
-        )
-        
-        // Yellow arc (bottom left)
-        drawArc(
-            color = Color(0xFFFBBC04),
-            startAngle = 225f,
-            sweepAngle = 90f,
-            useCenter = false,
-            topLeft = Offset(center.x - radius, center.y - radius),
-            size = androidx.compose.ui.geometry.Size(radius * 2, radius * 2),
-            style = Stroke(width = strokeWidth)
-        )
-        
-        // Green arc (bottom right)
-        drawArc(
-            color = Color(0xFF34A853),
-            startAngle = 315f,
-            sweepAngle = 90f,
-            useCenter = false,
-            topLeft = Offset(center.x - radius, center.y - radius),
-            size = androidx.compose.ui.geometry.Size(radius * 2, radius * 2),
-            style = Stroke(width = strokeWidth)
-        )
-        
-        // Horizontal line for "G" (extending from center to right)
-        drawLine(
-            color = Color(0xFF4285F4),
-            start = Offset(center.x, center.y),
-            end = Offset(center.x + radius * 0.6f, center.y),
-            strokeWidth = strokeWidth
-        )
-    }
-}

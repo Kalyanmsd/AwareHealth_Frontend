@@ -62,6 +62,9 @@ dependencies {
     implementation(libs.okhttp.logging)
     implementation(libs.gson)
     
+    // Google Sign-In
+    implementation("com.google.android.gms:play-services-auth:21.0.0")
+    
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

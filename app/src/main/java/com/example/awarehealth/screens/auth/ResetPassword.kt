@@ -13,6 +13,8 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Pin
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,24 +26,44 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.awarehealth.data.AppRepository
+import com.example.awarehealth.viewmodel.AuthViewModel
+import com.example.awarehealth.viewmodel.AuthViewModelFactory
 import kotlinx.coroutines.delay
 
 @Composable
 fun ResetPasswordScreen(
-    onBackToLogin: () -> Unit
+    email: String = "",
+    otp: String = "",
+    onBackToLogin: () -> Unit,
+    repository: AppRepository
 ) {
 
+    val authViewModel: AuthViewModel = viewModel(factory = AuthViewModelFactory(repository))
+    val uiState by authViewModel.uiState.collectAsState()
+
+    var emailState by remember { mutableStateOf(email) }
+    var otpState by remember { mutableStateOf(otp) }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
     var showConfirmPassword by remember { mutableStateOf(false) }
     var success by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf("") }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
     val scrollState = rememberScrollState()
 
     // Handle back button
     BackHandler {
         onBackToLogin()
+    }
+
+    // Observe errors
+    LaunchedEffect(uiState.error) {
+        uiState.error?.let {
+            errorMessage = it
+            authViewModel.clearError()
+        }
     }
 
     // Auto redirect after success
@@ -134,6 +156,114 @@ fun ResetPasswordScreen(
                 )
 
                 Spacer(modifier = Modifier.height(40.dp))
+
+                // Email (only show if not pre-filled)
+                if (email.isEmpty()) {
+                    Text(
+                        text = "Email Address",
+                        color = Color(0xFF2D3748),
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    OutlinedTextField(
+                        value = emailState,
+                        onValueChange = { emailState = it },
+                        placeholder = {
+                            Text(
+                                "Enter your email",
+                                color = Color(0xFFA0AEC0),
+                                fontSize = 15.sp
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Email,
+                                contentDescription = null,
+                                tint = Color(0xFF718096),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .shadow(
+                                elevation = 2.dp,
+                                shape = RoundedCornerShape(16.dp),
+                                spotColor = Color.Black.copy(alpha = 0.05f)
+                            ),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFFAEE4C1),
+                            unfocusedBorderColor = Color(0xFFE2E8F0),
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White,
+                            focusedTextColor = Color(0xFF2D3748),
+                            unfocusedTextColor = Color(0xFF2D3748)
+                        ),
+                        textStyle = androidx.compose.ui.text.TextStyle(
+                            fontSize = 15.sp,
+                            color = Color(0xFF2D3748)
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(20.dp))
+                }
+
+                // OTP (only show if not pre-filled/verified)
+                if (otp.isEmpty()) {
+                    Text(
+                        text = "OTP Code",
+                        color = Color(0xFF2D3748),
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    OutlinedTextField(
+                        value = otpState,
+                        onValueChange = { if (it.length <= 6 && it.all { char -> char.isDigit() }) otpState = it },
+                    placeholder = {
+                        Text(
+                            "Enter 6-digit OTP",
+                            color = Color(0xFFA0AEC0),
+                            fontSize = 15.sp
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.Pin,
+                            contentDescription = null,
+                            tint = Color(0xFF718096),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .shadow(
+                            elevation = 2.dp,
+                            shape = RoundedCornerShape(16.dp),
+                            spotColor = Color.Black.copy(alpha = 0.05f)
+                        ),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color(0xFFAEE4C1),
+                        unfocusedBorderColor = Color(0xFFE2E8F0),
+                        focusedContainerColor = Color.White,
+                        unfocusedContainerColor = Color.White,
+                        focusedTextColor = Color(0xFF2D3748),
+                        unfocusedTextColor = Color(0xFF2D3748)
+                    ),
+                    textStyle = androidx.compose.ui.text.TextStyle(
+                        fontSize = 15.sp,
+                        color = Color(0xFF2D3748)
+                    )
+                )
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
 
                 // New password
                 Text(
@@ -282,7 +412,7 @@ fun ResetPasswordScreen(
                     )
                 )
 
-                if (error.isNotEmpty()) {
+                errorMessage?.let { error ->
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         error,
@@ -294,17 +424,31 @@ fun ResetPasswordScreen(
 
                 Spacer(modifier = Modifier.height(32.dp))
 
-                val isFormValid = password.isNotBlank() && confirmPassword.isNotBlank()
+                val finalEmail = emailState.ifEmpty { email }
+                val finalOTP = otpState.ifEmpty { otp }
+                val isFormValid = finalEmail.isNotBlank() && finalOTP.length == 6 && password.isNotBlank() && confirmPassword.isNotBlank() && !uiState.isLoading
                 
                 Button(
                     onClick = {
+                        errorMessage = null
                         if (password.length < 6) {
-                            error = "Password must be at least 6 characters"
+                            errorMessage = "Password must be at least 6 characters"
                         } else if (password != confirmPassword) {
-                            error = "Passwords do not match"
+                            errorMessage = "Passwords do not match"
+                        } else if (finalOTP.length != 6) {
+                            errorMessage = "OTP must be 6 digits"
                         } else {
-                            error = ""
-                            success = true
+                                   authViewModel.resetPassword(
+                                       email = finalEmail,
+                                       otp = finalOTP,
+                                newPassword = password,
+                                onSuccess = {
+                                    success = true
+                                },
+                                onError = { error ->
+                                    errorMessage = error
+                                }
+                            )
                         }
                     },
                     enabled = isFormValid,
@@ -324,12 +468,19 @@ fun ResetPasswordScreen(
                         disabledContentColor = Color(0xFFA0AEC0)
                     )
                 ) {
-                    Text(
-                        text = "Reset Password",
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        letterSpacing = 0.5.sp
-                    )
+                    if (uiState.isLoading) {
+                        CircularProgressIndicator(
+                            color = Color(0xFF2D3748),
+                            modifier = Modifier.size(24.dp)
+                        )
+                    } else {
+                        Text(
+                            text = "Reset Password",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = 0.5.sp
+                        )
+                    }
                 }
 
             } else {

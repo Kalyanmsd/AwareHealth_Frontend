@@ -7,8 +7,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Composablegg
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -16,6 +21,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.awarehealth.data.AppRepository
+import com.example.awarehealth.data.DoctorData
+import com.example.awarehealth.viewmodel.DoctorsViewModel
+import com.example.awarehealth.viewmodel.DoctorsViewModelFactory
+import com.example.awarehealth.viewmodel.DoctorsUiState
 
 /* ---------- MODEL ---------- */
 
@@ -35,51 +46,45 @@ data class Doctor(
 @Composable
 fun SelectDoctorScreen(
     onBack: () -> Unit,
-    onDoctorSelected: (Doctor) -> Unit
+    onDoctorSelected: (Doctor) -> Unit,
+    repository: AppRepository? = null
 ) {
-
-    val doctors = listOf(
-        Doctor(
-            id = "1",
-            name = "Dr. Sarah Johnson",
-            specialty = "Cardiology",
-            experience = "10 years",
-            rating = 4.8,
-            availability = "Available Today",
-            location = "City Hospital",
-            color = Color(0xFFFFEAD6)
-        ),
-        Doctor(
-            id = "2",
-            name = "Dr. Michael Chen",
-            specialty = "Dermatology",
-            experience = "8 years",
-            rating = 4.9,
-            availability = "Available Tomorrow",
-            location = "Medical Center",
-            color = Color(0xFFE9FFF4)
-        ),
-        Doctor(
-            id = "3",
-            name = "Dr. Emily Rodriguez",
-            specialty = "Pediatrics",
-            experience = "12 years",
-            rating = 4.7,
-            availability = "Available Today",
-            location = "Children's Hospital",
-            color = Color(0xFFFFEAD6) // Light orange/peach
-        ),
-        Doctor(
-            id = "4",
-            name = "Dr. James Wilson",
-            specialty = "Orthopedics",
-            experience = "15 years",
-            rating = 4.9,
-            availability = "Next Week",
-            location = "Bone & Joint Clinic",
-            color = Color(0xFFE9FFF4) // Light green
+    // Create ViewModel - only if repository is available
+    val viewModel: DoctorsViewModel? = if (repository != null) {
+        viewModel(factory = DoctorsViewModelFactory(repository))
+    } else {
+        null
+    }
+    
+    val uiState: com.example.awarehealth.viewmodel.DoctorsUiState = if (viewModel != null) {
+        viewModel.uiState.collectAsState().value
+    } else {
+        com.example.awarehealth.viewmodel.DoctorsUiState(
+            isLoading = false,
+            error = "Repository not available. Please restart the app.",
+            doctors = emptyList()
         )
-    )
+    }
+    
+    // Load doctors when screen is first displayed
+    LaunchedEffect(Unit) {
+        viewModel?.initialLoad()
+    }
+    
+    // Convert DoctorData to Doctor with alternating colors
+    val doctors: List<Doctor> = uiState.doctors.mapIndexed { index, doctorData ->
+        Doctor(
+            id = doctorData.id,
+            name = doctorData.name,
+            specialty = doctorData.specialty,
+            experience = doctorData.experience,
+            rating = doctorData.rating,
+            availability = doctorData.availability,
+            location = doctorData.location,
+            // Alternate colors for visual variety
+            color = if (index % 2 == 0) Color(0xFFFFEAD6) else Color(0xFFE9FFF4)
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -95,30 +100,112 @@ fun SelectDoctorScreen(
         ) {
             /* ---------- TITLE SECTION ---------- */
             item {
-                Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Select Doctor",
+                            fontSize = 32.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF2D3748),
+                            lineHeight = 38.sp
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Choose a specialist for your appointment",
+                            fontSize = 15.sp,
+                            color = Color(0xFF718096),
+                            lineHeight = 22.sp
+                        )
+                    }
+                    
+                    // Refresh button
                     Text(
-                        text = "Select Doctor",
-                        fontSize = 32.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF2D3748),
-                        lineHeight = 38.sp
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Choose a specialist for your appointment",
-                        fontSize = 15.sp,
-                        color = Color(0xFF718096),
-                        lineHeight = 22.sp
+                        text = "🔄",
+                        fontSize = 24.sp,
+                        modifier = Modifier
+                            .clickable { viewModel?.refresh() }
+                            .padding(8.dp),
+                        color = Color(0xFF4A5568)
                     )
                 }
             }
 
+            /* ---------- LOADING STATE ---------- */
+            if (uiState.isLoading) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(40.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = Color(0xFFAEE4C1))
+                    }
+                }
+            }
+            
+            /* ---------- ERROR STATE ---------- */
+            if (uiState.error != null && !uiState.isLoading) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(40.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "⚠️ ${uiState.error}",
+                                color = Color(0xFFEA4335),
+                                fontSize = 16.sp
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Button(
+                                onClick = { viewModel?.refresh() },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFFAEE4C1)
+                                )
+                            ) {
+                                Text(
+                                    text = "Tap to Refresh",
+                                    color = Color(0xFF2D3748),
+                                    fontSize = 14.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            
             /* ---------- DOCTOR LIST ---------- */
-            items(doctors) { doctor ->
-                DoctorCard(
-                    doctor = doctor,
-                    onClick = { onDoctorSelected(doctor) }
-                )
+            if (!uiState.isLoading && uiState.error == null) {
+                if (doctors.isEmpty()) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(40.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "No doctors available at Saveetha Hospital",
+                                color = Color(0xFF718096),
+                                fontSize = 16.sp
+                            )
+                        }
+                    }
+                } else {
+                    items(doctors) { doctor ->
+                        DoctorCard(
+                            doctor = doctor,
+                            onClick = { onDoctorSelected(doctor) }
+                        )
+                    }
+                }
             }
             
             item {

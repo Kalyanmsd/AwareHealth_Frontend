@@ -21,8 +21,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.awarehealth.data.AppRepository
+import com.example.awarehealth.viewmodel.HealthViewModel
 
 /* ---------- MODEL ---------- */
 
@@ -40,87 +44,55 @@ data class Disease(
 
 @Composable
 fun DiseaseListScreen(
+    repository: AppRepository,
     onBack: () -> Unit,
     onMenu: () -> Unit,
     onDiseaseClick: (Disease) -> Unit
 ) {
+    val viewModel: HealthViewModel = viewModel { HealthViewModel(repository) }
+    val uiState by viewModel.uiState.collectAsState()
 
     var search by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("All") }
+    
+    // Initial load on first composition
+    LaunchedEffect(Unit) {
+        viewModel.initialLoad()
+    }
 
     val categories = listOf(
-        "All", "Infectious", "Chronic", "Respiratory", "Digestive", "Seasonal"
+        "All", "Infectious", "Chronic", "Respiratory", "Digestive", "Seasonal", "Skin", "Mental Health", "Neurological", "Eye", "General"
     )
 
-    val diseases = listOf(
-        Disease(
-            "cold",
-            "Common Cold",
-            "Respiratory",
-            "Low",
-            "Viral infection of the upper respiratory tract",
-            listOf("Runny nose", "Cough", "Sneezing"),
-            "🤧"
-        ),
-        Disease(
-            "flu",
-            "Influenza (Flu)",
-            "Infectious",
-            "Moderate",
-            "Contagious respiratory illness caused by influenza viruses",
-            listOf("Fever", "Body pain", "Fatigue"),
-            "🤒"
-        ),
-        Disease(
-            "diabetes",
-            "Diabetes",
-            "Chronic",
-            "High",
-            "Chronic condition affecting blood sugar regulation",
-            listOf("Thirst", "Fatigue", "Frequent urination"),
-            "🩸"
-        ),
-        Disease(
-            "asthma",
-            "Asthma",
-            "Respiratory",
-            "Moderate",
-            "Chronic condition affecting the airways in lungs",
-            listOf("Shortness of breath", "Wheezing", "Coughing"),
-            "😮‍💨"
-        ),
-        Disease(
-            "migraine",
-            "Migraine",
-            "Chronic",
-            "Moderate",
-            "Severe headache with throbbing pain",
-            listOf("Headache", "Nausea", "Sensitivity to light"),
-            "🤕"
-        ),
-        Disease(
-            "arthritis",
-            "Arthritis",
-            "Chronic",
-            "Moderate",
-            "Inflammation of joints causing pain and stiffness",
-            listOf("Joint pain", "Stiffness", "Swelling"),
-            "🦴"
-        ),
-        Disease(
-            "depression",
-            "Depression",
-            "Chronic",
-            "High",
-            "Mental health condition causing persistent sadness",
-            listOf("Sadness", "Loss of interest", "Fatigue"),
-            "😔"
+    // Debounce search to avoid too many API calls
+    var searchDebounce by remember { mutableStateOf("") }
+    
+    LaunchedEffect(search) {
+        kotlinx.coroutines.delay(500) // Wait 500ms after user stops typing
+        searchDebounce = search
+    }
+    
+    // Reload when category or search changes (debounced)
+    LaunchedEffect(selectedCategory, searchDebounce) {
+        viewModel.loadDiseases(
+            category = if (selectedCategory == "All") null else selectedCategory,
+            search = if (searchDebounce.isBlank()) null else searchDebounce
         )
-    )
+    }
 
-    val filteredDiseases = diseases.filter {
-        it.name.contains(search, true) &&
-                (selectedCategory == "All" || it.category == selectedCategory)
+    // Convert API DiseaseData to UI Disease model
+    val diseases = remember(uiState.diseases) {
+        uiState.diseases.map { diseaseData ->
+            Disease(
+                id = diseaseData.id,
+                name = diseaseData.name,
+                category = diseaseData.category ?: "General",
+                severity = mapSeverity(diseaseData.severity ?: "Moderate"),
+                description = diseaseData.description,
+                symptoms = diseaseData.symptoms ?: emptyList(),
+                emoji = diseaseData.emoji ?: "🏥"
+            )
+        }
     }
 
     fun severityColor(level: String) = when (level) {
@@ -259,28 +231,106 @@ fun DiseaseListScreen(
             Spacer(modifier = Modifier.height(28.dp))
 
             /* ---------- LIST ---------- */
-            if (filteredDiseases.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 40.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        "No diseases found",
-                        fontSize = 16.sp,
-                        color = Color(0xFF718096)
-                    )
+            when {
+                uiState.isLoading && diseases.isEmpty() -> {
+                    // Show loading only if we have no data yet
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 40.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            CircularProgressIndicator(
+                                color = Color(0xFFAEE4C1),
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                "Loading diseases...",
+                                fontSize = 16.sp,
+                                color = Color(0xFF718096)
+                            )
+                        }
+                    }
                 }
-            } else {
-                filteredDiseases.forEach { disease ->
-                    DiseaseCard(
-                        disease = disease,
-                        severityColor = severityColor(disease.severity),
-                        severityTagColor = severityTagColor(disease.severity),
-                        onClick = { onDiseaseClick(disease) }
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
+                uiState.error != null && diseases.isEmpty() -> {
+                    // Show error only if we have no data
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 40.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(horizontal = 24.dp)
+                        ) {
+                            Text(
+                                uiState.error ?: "Error loading diseases",
+                                fontSize = 16.sp,
+                                color = Color(0xFFE53E3E),
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Button(
+                                onClick = { 
+                                    viewModel.clearError()
+                                    viewModel.loadDiseases(
+                                        category = if (selectedCategory == "All") null else selectedCategory,
+                                        search = if (search.isBlank()) null else search
+                                    )
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFFAEE4C1),
+                                    contentColor = Color(0xFF2D3748)
+                                )
+                            ) {
+                                Text("Retry")
+                            }
+                        }
+                    }
+                }
+                diseases.isEmpty() && !uiState.isLoading -> {
+                    // No data and not loading
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 40.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                "No diseases found",
+                                fontSize = 16.sp,
+                                color = Color(0xFF718096)
+                            )
+                            if (search.isNotBlank() || selectedCategory != "All") {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    "Try changing your search or filter",
+                                    fontSize = 14.sp,
+                                    color = Color(0xFFA0AEC0)
+                                )
+                            }
+                        }
+                    }
+                }
+                else -> {
+                    // Show diseases list
+                    diseases.forEach { disease ->
+                        DiseaseCard(
+                            disease = disease,
+                            severityColor = severityColor(disease.severity),
+                            severityTagColor = severityTagColor(disease.severity),
+                            onClick = { onDiseaseClick(disease) }
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
                 }
             }
 
@@ -329,6 +379,16 @@ fun DiseaseListScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
         }
+    }
+}
+
+// Helper function to map API severity to UI severity
+private fun mapSeverity(severity: String): String {
+    return when (severity.lowercase()) {
+        "mild" -> "Low"
+        "moderate" -> "Moderate"
+        "severe" -> "High"
+        else -> severity
     }
 }
 

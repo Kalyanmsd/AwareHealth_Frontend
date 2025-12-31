@@ -11,11 +11,20 @@ interface ApiService {
     @POST("auth/login")
     suspend fun login(@Body request: LoginRequest): Response<AuthResponse>
     
+    @POST("auth/doctor-login")
+    suspend fun doctorLogin(@Body request: DoctorLoginRequest): Response<AuthResponse>
+    
     @POST("auth/forgot-password")
     suspend fun forgotPassword(@Body request: ForgotPasswordRequest): Response<ApiResponse>
     
+    @POST("auth/verify-otp")
+    suspend fun verifyOTP(@Body request: VerifyOTPRequest): Response<ApiResponse>
+    
     @POST("auth/reset-password")
     suspend fun resetPassword(@Body request: ResetPasswordRequest): Response<ApiResponse>
+    
+    @POST("auth/google-signin")
+    suspend fun googleSignIn(@Body request: GoogleSignInRequest): Response<AuthResponse>
     
     // Doctors
     @GET("doctors")
@@ -39,10 +48,10 @@ interface ApiService {
     suspend fun sendChatMessage(@Body request: ChatMessageRequest): Response<ChatMessageResponse>
     
     // Health Info
-    @GET("diseases")
-    suspend fun getDiseases(): Response<DiseasesResponse>
+    @GET("health/diseases")
+    suspend fun getDiseases(@Query("category") category: String? = null, @Query("search") search: String? = null): Response<DiseasesResponse>
     
-    @GET("diseases/{id}")
+    @GET("health/diseases/{id}")
     suspend fun getDisease(@Path("id") id: String): Response<DiseaseResponse>
 }
 
@@ -61,9 +70,18 @@ data class LoginRequest(
     val userType: String
 )
 
+data class DoctorLoginRequest(
+    val doctorId: String,
+    val password: String
+)
+
 data class ForgotPasswordRequest(val email: String)
 
-data class ResetPasswordRequest(val email: String, val newPassword: String)
+data class VerifyOTPRequest(val email: String, val otp: String)
+
+data class ResetPasswordRequest(val email: String, val otp: String, val newPassword: String)
+
+data class GoogleSignInRequest(val idToken: String, val userType: String)
 
 data class CreateAppointmentRequest(
     val patientId: String,
@@ -128,7 +146,20 @@ data class AppointmentData(
     val status: String
 )
 
-data class DiseaseData(val id: String, val name: String, val description: String)
+data class DiseaseData(
+    val id: String,
+    val name: String,
+    val category: String? = null,
+    val severity: String? = null,
+    val emoji: String? = null,
+    val description: String,
+    val symptoms: List<String>? = null,
+    val causes: List<String>? = null,
+    val prevention: List<String>? = null,
+    val treatment: List<String>? = null,
+    val affectedPopulation: String? = null,
+    val duration: String? = null
+)
 
 
 

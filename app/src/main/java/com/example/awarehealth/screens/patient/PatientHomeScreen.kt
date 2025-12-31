@@ -35,7 +35,8 @@ data class Appointment(
 )
 
 data class User(
-    val name: String
+    val name: String,
+    val id: String = ""
 )
 
 /* ---------- SCREEN ---------- */

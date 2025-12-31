@@ -3,6 +3,8 @@ package com.example.awarehealth.navigation
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.navigation.NavHostController
+import kotlinx.coroutines.launch
+import android.util.Log
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -42,7 +44,8 @@ fun AwareHealthNavGraph(
     apiService: ApiService? = null
 ) {
     val repository = remember { AppRepository(apiService) }
-    val user = remember { mutableStateOf(User(name = "John Smith")) }
+    val user = remember { mutableStateOf(User(name = "John Smith", id = "")) }
+    val userData = remember { mutableStateOf<com.example.awarehealth.data.UserData?>(null) }
     // Patient appointments - using local PatientAppointment (has doctorName)
     val patientAppointments = remember { 
         mutableStateListOf<PatientAppointment>()
@@ -50,6 +53,9 @@ fun AwareHealthNavGraph(
     var selectedDoctor by rememberSaveable { mutableStateOf<Doctor?>(null) }
     var selectedDateTime by rememberSaveable { mutableStateOf<SelectedDateTime?>(null) }
     var selectedUserType by rememberSaveable { mutableStateOf("") }
+    
+    // Coroutine scope for API calls
+    val coroutineScope = rememberCoroutineScope()
 
     NavHost(navController = navController, startDestination = startDestination) {
         
@@ -74,8 +80,16 @@ fun AwareHealthNavGraph(
         ) { backStackEntry ->
             val userType = backStackEntry.arguments?.getString("userType") ?: ""
             LoginScreen(
+                repository = repository,
                 userType = userType,
-                onLoginSuccess = {
+                onLoginSuccess = { userDataFromLogin ->
+                    // Store user data
+                    userData.value = userDataFromLogin
+                    user.value = User(
+                        id = userDataFromLogin.id,
+                        name = userDataFromLogin.name
+                    )
+                    
                     if (userType == "doctor") {
                         navController.navigate(Screen.DoctorHome.route) {
                             popUpTo(0) { inclusive = true }
@@ -88,18 +102,6 @@ fun AwareHealthNavGraph(
                 },
                 onRegister = { navController.navigate(Screen.Register.createRoute(userType)) },
                 onForgotPassword = { navController.navigate(Screen.ForgotPassword.route) },
-                onGoogleLogin = {
-                    // Google login - navigate directly without validation
-                    if (userType == "doctor") {
-                        navController.navigate(Screen.DoctorHome.route) {
-                            popUpTo(0) { inclusive = true }
-                        }
-                    } else {
-                        navController.navigate(Screen.PatientHome.route) {
-                            popUpTo(0) { inclusive = true }
-                        }
-                    }
-                },
                 onBack = { 
                     navController.navigate(Screen.UserTypeSelection.route) {
                         popUpTo(Screen.Login.route) { inclusive = true }
@@ -114,30 +116,63 @@ fun AwareHealthNavGraph(
         ) { backStackEntry ->
             val userType = backStackEntry.arguments?.getString("userType") ?: ""
             RegisterScreen(
+                repository = repository,
                 userType = userType,
-                onRegisterSuccess = {
-                    navController.navigate(Screen.Login.createRoute(userType)) {
-                        popUpTo(Screen.Register.route) { inclusive = true }
+                onRegisterSuccess = { userDataFromRegister ->
+                    // Store user data
+                    userData.value = userDataFromRegister
+                    user.value = User(
+                        id = userDataFromRegister.id,
+                        name = userDataFromRegister.name
+                    )
+                    
+                    // Navigate to appropriate home screen after successful registration
+                    if (userType == "doctor") {
+                        navController.navigate(Screen.DoctorHome.route) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    } else {
+                        navController.navigate(Screen.PatientHome.route) {
+                            popUpTo(0) { inclusive = true }
+                        }
                     }
                 },
-                onBackToLogin = { navController.popBackStack() },
-                onGoogleSignup = {}
+                onBackToLogin = { navController.popBackStack() }
             )
         }
 
         composable(Screen.ForgotPassword.route) {
             ForgotPasswordScreen(
                 onBackToLogin = { navController.popBackStack() },
-                onResetNavigate = { navController.navigate(Screen.ResetPassword.route) }
+                onOTPVerified = { email, otp ->
+                    // Navigate to reset password with email and OTP (OTP is hidden from user)
+                    navController.navigate("${Screen.ResetPassword.route}?email=${android.net.Uri.encode(email)}&otp=${android.net.Uri.encode(otp)}") {
+                        popUpTo(Screen.ForgotPassword.route) { inclusive = true }
+                    }
+                },
+                repository = repository
             )
         }
 
-        composable(Screen.ResetPassword.route) {
-            ResetPasswordScreen {
+        composable(
+            route = "${Screen.ResetPassword.route}?email={email}&otp={otp}",
+            arguments = listOf(
+                navArgument("email") { type = NavType.StringType; defaultValue = "" },
+                navArgument("otp") { type = NavType.StringType; defaultValue = "" }
+            )
+        ) { backStackEntry ->
+            val email = backStackEntry.arguments?.getString("email") ?: ""
+            val otp = backStackEntry.arguments?.getString("otp") ?: ""
+            ResetPasswordScreen(
+                email = email,
+                otp = otp,
+                onBackToLogin = {
                 navController.navigate(Screen.Login.createRoute(selectedUserType)) {
                     popUpTo(Screen.ForgotPassword.route) { inclusive = true }
                 }
-            }
+                },
+                repository = repository
+            )
         }
 
         composable(Screen.PatientHome.route) {
@@ -234,7 +269,8 @@ fun AwareHealthNavGraph(
                     onDoctorSelected = { doctor ->
                         selectedDoctor = doctor
                         navController.navigate(Screen.SelectDateTime.route)
-                    }
+                    },
+                    repository = repository
                 )
             }
         }
@@ -262,25 +298,112 @@ fun AwareHealthNavGraph(
                     user = user.value,
                     onBack = { navController.popBackStack() },
                     onConfirm = { symptoms ->
-                        val appointmentId = System.currentTimeMillis().toString()
+                        val patientId = userData.value?.id ?: user.value.id
+                        val doctorId = selectedDoctor?.id
                         val date = selectedDateTime?.date ?: ""
                         val time = selectedDateTime?.time ?: ""
                         val patientName = user.value.name
-                        val doctorName = selectedDoctor?.name ?: ""
                         
-                        // Create patient appointment - PatientAppointment (has doctorName)
-                        patientAppointments.add(
-                            PatientAppointment(
-                                id = appointmentId,
-                                doctorName = doctorName,
-                                patientName = patientName,
-                                date = date,
-                                time = time,
-                                status = "pending"
+                        if (patientId.isEmpty() || doctorId.isNullOrEmpty()) {
+                            // Fallback to local storage if user ID not available
+                            val appointmentId = System.currentTimeMillis().toString()
+                            val doctorName = selectedDoctor?.name ?: ""
+                            
+                            patientAppointments.add(
+                                PatientAppointment(
+                                    id = appointmentId,
+                                    doctorName = doctorName,
+                                    patientName = patientName,
+                                    date = date,
+                                    time = time,
+                                    status = "pending"
+                                )
                             )
-                        )
-                        navController.navigate(Screen.AppointmentSuccess.route) {
-                            popUpTo(Screen.SelectDoctor.route) { inclusive = true }
+                            navController.navigate(Screen.AppointmentSuccess.route) {
+                                popUpTo(Screen.SelectDoctor.route) { inclusive = true }
+                            }
+                        } else {
+                            // Create appointment via API
+                            coroutineScope.launch {
+                                try {
+                                    val request = com.example.awarehealth.data.CreateAppointmentRequest(
+                                        patientId = patientId,
+                                        doctorId = doctorId,
+                                        date = date,
+                                        time = time,
+                                        symptoms = symptoms
+                                    )
+                                    
+                                    val response = repository.createAppointment(request)
+                                    
+                                    if (response?.isSuccessful == true && response.body()?.success == true) {
+                                        val appointment = response.body()!!.appointment
+                                        
+                                        // Also add to local list for UI
+                                        patientAppointments.add(
+                                            PatientAppointment(
+                                                id = appointment.id,
+                                                doctorName = selectedDoctor?.name ?: "",
+                                                patientName = patientName,
+                                                date = appointment.date,
+                                                time = appointment.time,
+                                                status = appointment.status
+                                            )
+                                        )
+                                        
+                                        Log.d("NavGraph", "Appointment created successfully: ${appointment.id}")
+                                        
+                                        navController.navigate(Screen.AppointmentSuccess.route) {
+                                            popUpTo(Screen.SelectDoctor.route) { inclusive = true }
+                                        }
+                                    } else {
+                                        val errorMsg = response?.body()?.let { 
+                                            if (it is com.example.awarehealth.data.AppointmentResponse) {
+                                                it.toString()
+                                            } else {
+                                                "Failed to create appointment"
+                                            }
+                                        } ?: "Network error"
+                                        
+                                        Log.e("NavGraph", "Failed to create appointment: $errorMsg")
+                                        
+                                        // Fallback: still navigate but show error later
+                                        // For now, we'll proceed with local storage as fallback
+                                        val appointmentId = System.currentTimeMillis().toString()
+                                        patientAppointments.add(
+                                            PatientAppointment(
+                                                id = appointmentId,
+                                                doctorName = selectedDoctor?.name ?: "",
+                                                patientName = patientName,
+                                                date = date,
+                                                time = time,
+                                                status = "pending"
+                                            )
+                                        )
+                                        navController.navigate(Screen.AppointmentSuccess.route) {
+                                            popUpTo(Screen.SelectDoctor.route) { inclusive = true }
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e("NavGraph", "Exception creating appointment: ${e.message}", e)
+                                    
+                                    // Fallback to local storage on error
+                                    val appointmentId = System.currentTimeMillis().toString()
+                                    patientAppointments.add(
+                                        PatientAppointment(
+                                            id = appointmentId,
+                                            doctorName = selectedDoctor?.name ?: "",
+                                            patientName = patientName,
+                                            date = date,
+                                            time = time,
+                                            status = "pending"
+                                        )
+                                    )
+                                    navController.navigate(Screen.AppointmentSuccess.route) {
+                                        popUpTo(Screen.SelectDoctor.route) { inclusive = true }
+                                    }
+                                }
+                            }
                         }
                     }
                 )
@@ -381,6 +504,7 @@ fun AwareHealthNavGraph(
             Column {
                 Header(showBack = true, onBackClick = { navController.popBackStack() })
                 ChatWindowScreen(
+                    repository = repository,
                     onBack = { navController.popBackStack() },
                     onDaysQuestion = {
                         navController.navigate(Screen.DaysQuestion.route)
@@ -525,6 +649,7 @@ fun AwareHealthNavGraph(
             Column {
                 Header(showBack = true, onBackClick = { navController.popBackStack() })
                 DiseaseListScreen(
+                    repository = repository,
                     onBack = { navController.popBackStack() },
                     onMenu = { navController.navigate(Screen.PatientMenu.route) },
                     onDiseaseClick = { disease ->
@@ -543,6 +668,7 @@ fun AwareHealthNavGraph(
                 Header(showBack = true, onBackClick = { navController.popBackStack() })
                 DiseaseDetailsScreen(
                     diseaseId = diseaseId,
+                    repository = repository,
                     onBack = { navController.popBackStack() },
                     onAskAI = {
                         navController.navigate(Screen.ChatbotMain.route) {
