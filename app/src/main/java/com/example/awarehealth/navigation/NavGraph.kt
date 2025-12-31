@@ -298,14 +298,18 @@ fun AwareHealthNavGraph(
                     user = user.value,
                     onBack = { navController.popBackStack() },
                     onConfirm = { symptoms ->
-                        val patientId = userData.value?.id ?: user.value.id
-                        val doctorId = selectedDoctor?.id
+                        // Get user email (prefer from userData, fallback to default)
+                        val userEmail = userData.value?.email ?: "patient@example.com"
+                        val doctorId = selectedDoctor?.id?.toIntOrNull()
                         val date = selectedDateTime?.date ?: ""
                         val time = selectedDateTime?.time ?: ""
                         val patientName = user.value.name
                         
-                        if (patientId.isEmpty() || doctorId.isNullOrEmpty()) {
-                            // Fallback to local storage if user ID not available
+                        // Convert time format if needed (HH:MM to HH:MM:SS)
+                        val formattedTime = if (time.length == 5) "$time:00" else time
+                        
+                        if (doctorId == null || date.isEmpty() || formattedTime.isEmpty()) {
+                            // Fallback to local storage if data not available
                             val appointmentId = System.currentTimeMillis().toString()
                             val doctorName = selectedDoctor?.name ?: ""
                             
@@ -323,38 +327,56 @@ fun AwareHealthNavGraph(
                                 popUpTo(Screen.SelectDoctor.route) { inclusive = true }
                             }
                         } else {
-                            // Create appointment via API
+                            // Create appointment via NEW API endpoint
                             coroutineScope.launch {
                                 try {
-                                    val request = com.example.awarehealth.data.CreateAppointmentRequest(
-                                        patientId = patientId,
-                                        doctorId = doctorId,
-                                        date = date,
-                                        time = time,
-                                        symptoms = symptoms
+                                    val request = com.example.awarehealth.data.BookAppointmentRequest(
+                                        user_email = userEmail,
+                                        doctor_id = doctorId,
+                                        appointment_date = date,
+                                        appointment_time = formattedTime
                                     )
                                     
-                                    val response = repository.createAppointment(request)
+                                    val response = repository.bookAppointment(request)
                                     
                                     if (response?.isSuccessful == true && response.body()?.success == true) {
-                                        val appointment = response.body()!!.appointment
+                                        val appointment = response.body()?.appointment
                                         
-                                        // Also add to local list for UI
-                                        patientAppointments.add(
-                                            PatientAppointment(
-                                                id = appointment.id,
-                                                doctorName = selectedDoctor?.name ?: "",
-                                                patientName = patientName,
-                                                date = appointment.date,
-                                                time = appointment.time,
-                                                status = appointment.status
+                                        if (appointment != null) {
+                                            // Also add to local list for UI
+                                            patientAppointments.add(
+                                                PatientAppointment(
+                                                    id = appointment.id.toString(),
+                                                    doctorName = appointment.doctor_name ?: selectedDoctor?.name ?: "",
+                                                    patientName = patientName,
+                                                    date = appointment.appointment_date,
+                                                    time = appointment.appointment_time,
+                                                    status = appointment.status
+                                                )
                                             )
-                                        )
-                                        
-                                        Log.d("NavGraph", "Appointment created successfully: ${appointment.id}")
-                                        
-                                        navController.navigate(Screen.AppointmentSuccess.route) {
-                                            popUpTo(Screen.SelectDoctor.route) { inclusive = true }
+                                            
+                                            Log.d("NavGraph", "Appointment created successfully: ${appointment.id}")
+                                            
+                                            navController.navigate(Screen.AppointmentSuccess.route) {
+                                                popUpTo(Screen.SelectDoctor.route) { inclusive = true }
+                                            }
+                                        } else {
+                                            Log.e("NavGraph", "Appointment data is null in response")
+                                            // Fallback to local storage
+                                            val appointmentId = System.currentTimeMillis().toString()
+                                            patientAppointments.add(
+                                                PatientAppointment(
+                                                    id = appointmentId,
+                                                    doctorName = selectedDoctor?.name ?: "",
+                                                    patientName = patientName,
+                                                    date = date,
+                                                    time = time,
+                                                    status = "pending"
+                                                )
+                                            )
+                                            navController.navigate(Screen.AppointmentSuccess.route) {
+                                                popUpTo(Screen.SelectDoctor.route) { inclusive = true }
+                                            }
                                         }
                                     } else {
                                         val errorMsg = response?.body()?.let { 

@@ -41,7 +41,8 @@ class DoctorsViewModel(private val repository: AppRepository) : ViewModel() {
             try {
                 Log.d("DoctorsViewModel", "Loading doctors from API...")
                 
-                val response = repository.getDoctors()
+                // Use the new get_doctors endpoint that filters by status = 'Available'
+                val response = repository.getDoctorsList()
                 
                 Log.d("DoctorsViewModel", "Response received: ${response?.isSuccessful}, Code: ${response?.code()}")
                 
@@ -50,8 +51,21 @@ class DoctorsViewModel(private val repository: AppRepository) : ViewModel() {
                     Log.d("DoctorsViewModel", "Success: ${doctorsResponse.success}, Doctors count: ${doctorsResponse.doctors?.size ?: 0}")
                     
                     if (doctorsResponse.success) {
-                        val doctors = doctorsResponse.doctors ?: emptyList()
-                        Log.d("DoctorsViewModel", "Loaded ${doctors.size} doctors from Saveetha Hospital")
+                        val doctorsBookingData = doctorsResponse.doctors ?: emptyList()
+                        Log.d("DoctorsViewModel", "Loaded ${doctorsBookingData.size} available doctors")
+                        
+                        // Convert DoctorBookingData to DoctorData for UI
+                        val doctors = doctorsBookingData.map { bookingData ->
+                            DoctorData(
+                                id = bookingData.id.toString(),
+                                name = bookingData.name,
+                                specialty = bookingData.specialization,
+                                experience = bookingData.experience,
+                                rating = 4.5, // Default rating
+                                availability = "${bookingData.available_days} - ${bookingData.available_time}",
+                                location = bookingData.hospital
+                            )
+                        }
                         
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
@@ -59,27 +73,39 @@ class DoctorsViewModel(private val repository: AppRepository) : ViewModel() {
                             error = null
                         )
                     } else {
-                        Log.e("DoctorsViewModel", "API returned success=false")
+                        Log.e("DoctorsViewModel", "API returned success=false: ${doctorsResponse.message}")
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
-                            error = "Failed to load doctors"
+                            error = doctorsResponse.message ?: "Failed to load doctors"
                         )
                     }
                 } else {
                     val errorBody = response?.errorBody()?.string()
-                    Log.e("DoctorsViewModel", "API call failed. Code: ${response?.code()}, Error: $errorBody")
+                    val statusCode = response?.code()
+                    Log.e("DoctorsViewModel", "API call failed. Code: $statusCode, Error: $errorBody")
                     
                     // Try to parse error message from JSON
                     val errorMessage = try {
                         if (!errorBody.isNullOrEmpty()) {
                             val gson = com.google.gson.Gson()
                             val errorJson = gson.fromJson(errorBody, Map::class.java)
-                            (errorJson["message"] as? String) ?: "Failed to load doctors"
+                            val message = errorJson["message"] as? String
+                            val note = errorJson["note"] as? String
+                            if (!note.isNullOrEmpty()) {
+                                "$message\n\n$note"
+                            } else {
+                                message ?: "Failed to load doctors"
+                            }
                         } else {
-                            "Failed to load doctors. Server returned code: ${response?.code()}"
+                            when (statusCode) {
+                                404 -> "API endpoint not found. Check server configuration."
+                                500 -> "Server error. Check database connection and doctors table."
+                                else -> "Failed to load doctors. Server returned code: $statusCode"
+                            }
                         }
                     } catch (e: Exception) {
-                        "Failed to load doctors. Please check your connection and ensure doctors are set up."
+                        Log.e("DoctorsViewModel", "Error parsing error response", e)
+                        "Failed to load doctors. Please check:\n1. XAMPP Apache is running\n2. Doctors table exists\n3. Doctors have status='Available'"
                     }
                     
                     _uiState.value = _uiState.value.copy(

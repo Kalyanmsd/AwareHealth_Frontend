@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.awarehealth.data.AppRepository
 import com.example.awarehealth.data.ChatMessageRequest
 import com.example.awarehealth.data.ChatMessageResponse
+import com.example.awarehealth.data.SymptomResponse
 import com.google.gson.Gson
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,7 +16,10 @@ import android.util.Log
 data class ChatbotUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
-    val conversationId: String? = null
+    val conversationId: String? = null,
+    val lastSymptomResponse: SymptomResponse? = null, // Store last AI symptom check result
+    val symptomConversationId: String? = null, // Track symptom conversation state
+    val waitingForDays: Boolean = false // Track if waiting for days input
 )
 
 class ChatbotViewModel(private val repository: AppRepository) : ViewModel() {
@@ -131,7 +135,101 @@ class ChatbotViewModel(private val repository: AppRepository) : ViewModel() {
      * Reset conversation (start new conversation)
      */
     fun resetConversation() {
-        _uiState.value = _uiState.value.copy(conversationId = null)
+        _uiState.value = _uiState.value.copy(
+            conversationId = null,
+            lastSymptomResponse = null,
+            symptomConversationId = null,
+            waitingForDays = false
+        )
+    }
+    
+    /**
+     * Check symptoms using AI model
+     * This is the primary method for symptom checking
+     */
+    suspend fun checkSymptoms(message: String, conversationId: String? = null): SymptomResponse? {
+        _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+        
+        return try {
+            // Use stored conversation ID or generate new one
+            val convId = conversationId ?: _uiState.value.symptomConversationId ?: System.currentTimeMillis().toString()
+            
+            val response = repository.checkSymptoms(message, convId)
+            
+            if (response?.isSuccessful == true && response.body() != null) {
+                val symptomResponse = response.body()!!
+                
+                if (symptomResponse.success) {
+                    // Update conversation state
+                    val waitingForDays = symptomResponse.conversation_state == "asking_days"
+                    
+                    // Store the symptom response for UI to use
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        lastSymptomResponse = symptomResponse,
+                        symptomConversationId = convId,
+                        waitingForDays = waitingForDays,
+                        error = null
+                    )
+                    symptomResponse
+                } else {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = symptomResponse.error ?: "Failed to analyze symptoms"
+                    )
+                    null
+                }
+            } else {
+                val errorMsg = "Unable to connect to AI symptom checker. Please try again."
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = errorMsg
+                )
+                null
+            }
+        } catch (e: Exception) {
+            Log.e("ChatbotViewModel", "Error checking symptoms", e)
+            val errorMsg = when {
+                e.message?.contains("Failed to connect", ignoreCase = true) == true ||
+                e.message?.contains("Connection refused", ignoreCase = true) == true ||
+                e.message?.contains("Connection timed out", ignoreCase = true) == true ->
+                    "Cannot connect to AI service.\n\nPlease check:\n1. Flask API is running (python flask_api.py)\n2. Phone and computer on same Wi-Fi\n3. Test: http://172.20.10.2:5000/health in phone browser"
+                else -> "Error analyzing symptoms: ${e.message ?: "Unknown error"}"
+            }
+            _uiState.value = _uiState.value.copy(
+                isLoading = false,
+                error = errorMsg
+            )
+            null
+        }
+    }
+    
+    /**
+     * Send message - tries AI symptom checker first, falls back to regular chatbot
+     */
+    suspend fun sendMessageWithAI(
+        message: String,
+        conversationId: String? = null
+    ): Pair<ChatMessageResponse?, SymptomResponse?> {
+        // If waiting for days input, use symptom conversation ID
+        val symptomConvId = if (_uiState.value.waitingForDays) {
+            _uiState.value.symptomConversationId
+        } else {
+            null
+        }
+        
+        // Try AI symptom checker
+        val symptomResponse = checkSymptoms(message, symptomConvId)
+        
+        if (symptomResponse != null && symptomResponse.success) {
+            // AI responded successfully, return symptom response
+            // Don't call regular chatbot
+            return Pair(null, symptomResponse)
+        } else {
+            // AI failed or not available, fall back to regular chatbot
+            val chatResponse = sendMessage(message, conversationId)
+            return Pair(chatResponse, null)
+        }
     }
 }
 

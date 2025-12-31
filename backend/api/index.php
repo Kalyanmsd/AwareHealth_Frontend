@@ -67,6 +67,10 @@ if (count($segments) > 0) {
             require_once __DIR__ . '/debug_otp.php';
             break;
             
+        case 'debug_otp_status':
+            require_once __DIR__ . '/debug_otp_status.php';
+            break;
+            
         case 'setup_password_reset_table':
             require_once __DIR__ . '/setup_password_reset_table.php';
             break;
@@ -105,6 +109,98 @@ if (count($segments) > 0) {
             
         case 'setup_select_doctor_database':
             require_once __DIR__ . '/setup_select_doctor_database.php';
+            break;
+            
+        case 'setup_otp_table':
+            require_once __DIR__ . '/setup_otp_table.php';
+            break;
+            
+        case 'auto_create_otp_table':
+            require_once __DIR__ . '/auto_create_otp_table.php';
+            break;
+            
+        case 'create_otp_table_direct':
+            require_once __DIR__ . '/create_otp_table_direct.php';
+            break;
+            
+        case 'verify_otp_table':
+            require_once __DIR__ . '/verify_otp_table.php';
+            break;
+            
+        case 'test_otp_flow':
+            require_once __DIR__ . '/test_otp_flow.php';
+            break;
+            
+        case 'debug_otp_insert':
+            require_once __DIR__ . '/debug_otp_insert.php';
+            break;
+            
+        case 'force_create_otp_table':
+            require_once __DIR__ . '/force_create_otp_table.php';
+            break;
+            
+        case 'send_otp':
+            require_once __DIR__ . '/send_otp.php';
+            break;
+            
+        case 'verify_otp':
+            require_once __DIR__ . '/verify_otp.php';
+            break;
+            
+        case 'resend_otp':
+            require_once __DIR__ . '/resend_otp.php';
+            break;
+            
+        case 'test_otp_simple':
+            require_once __DIR__ . '/test_otp_simple.php';
+            break;
+            
+        case 'check_otp_status':
+            require_once __DIR__ . '/check_otp_status.php';
+            break;
+            
+        case 'verify_table_exists':
+            require_once __DIR__ . '/verify_table_exists.php';
+            break;
+            
+        case 'test_endpoint_hit':
+            require_once __DIR__ . '/test_endpoint_hit.php';
+            break;
+            
+        case 'get_doctors':
+            require_once __DIR__ . '/get_doctors.php';
+            break;
+            
+        case 'book_appointment':
+            require_once __DIR__ . '/book_appointment.php';
+            break;
+            
+        case 'get_my_appointments':
+            require_once __DIR__ . '/get_my_appointments.php';
+            break;
+            
+        case 'auto_setup_appointment_tables':
+            require_once __DIR__ . '/auto_setup_appointment_tables.php';
+            break;
+            
+        case 'verify_tables':
+            require_once __DIR__ . '/verify_tables.php';
+            break;
+            
+        case 'create_doctors_table_direct':
+            require_once __DIR__ . '/create_doctors_table_direct.php';
+            break;
+            
+        case 'get_doctor_details':
+            require_once __DIR__ . '/get_doctor_details.php';
+            break;
+            
+        case 'test_get_doctors':
+            require_once __DIR__ . '/test_get_doctors.php';
+            break;
+            
+        case 'ensure_doctors':
+            require_once __DIR__ . '/ensure_doctors.php';
             break;
             
         default:

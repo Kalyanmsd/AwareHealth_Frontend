@@ -23,6 +23,26 @@ interface ApiService {
     @POST("auth/reset-password")
     suspend fun resetPassword(@Body request: ResetPasswordRequest): Response<ApiResponse>
     
+    // OTP Login System (new otp_verification table)
+    @POST("send_otp")
+    suspend fun sendOTP(@Body request: SendOTPRequest): Response<OTPResponse>
+    
+    @POST("verify_otp")
+    suspend fun verifyOTPLogin(@Body request: VerifyOTPLoginRequest): Response<OTPResponse>
+    
+    @POST("resend_otp")
+    suspend fun resendOTP(@Body request: SendOTPRequest): Response<OTPResponse>
+    
+    // Appointment Booking System (new endpoints)
+    @GET("get_doctors")
+    suspend fun getDoctorsList(): Response<GetDoctorsResponse>
+    
+    @POST("book_appointment")
+    suspend fun bookAppointment(@Body request: BookAppointmentRequest): Response<BookAppointmentResponse>
+    
+    @GET("get_my_appointments")
+    suspend fun getMyAppointments(@Query("email") email: String): Response<GetMyAppointmentsResponse>
+    
     @POST("auth/google-signin")
     suspend fun googleSignIn(@Body request: GoogleSignInRequest): Response<AuthResponse>
     
@@ -83,6 +103,11 @@ data class ResetPasswordRequest(val email: String, val otp: String, val newPassw
 
 data class GoogleSignInRequest(val idToken: String, val userType: String)
 
+// OTP Login System Requests
+data class SendOTPRequest(val email: String)
+
+data class VerifyOTPLoginRequest(val email: String, val otp: String)
+
 data class CreateAppointmentRequest(
     val patientId: String,
     val doctorId: String,
@@ -122,6 +147,68 @@ data class ChatMessageResponse(
 data class DiseasesResponse(val success: Boolean, val diseases: List<DiseaseData>)
 
 data class DiseaseResponse(val success: Boolean, val disease: DiseaseData)
+
+// OTP Response
+data class OTPResponse(
+    val success: Boolean,
+    val message: String?,
+    val otp: String? = null, // For testing
+    val expires_at: String? = null,
+    val inserted_id: Int? = null
+)
+
+// Appointment Booking Requests
+data class BookAppointmentRequest(
+    val user_email: String,
+    val doctor_id: Int,
+    val appointment_date: String,
+    val appointment_time: String
+)
+
+// Appointment Booking Responses
+data class GetDoctorsResponse(
+    val success: Boolean,
+    val message: String?,
+    val doctors: List<DoctorBookingData>,
+    val count: Int?,
+    val hospital: String?
+)
+
+data class DoctorBookingData(
+    val id: Int,
+    val name: String,
+    val specialization: String,
+    val hospital: String,
+    val experience: String,
+    val available_days: String,
+    val available_time: String
+)
+
+data class BookAppointmentResponse(
+    val success: Boolean,
+    val message: String?,
+    val appointment: AppointmentBookingData?
+)
+
+data class AppointmentBookingData(
+    val id: Int,
+    val user_email: String,
+    val doctor_id: Int,
+    val doctor_name: String?,
+    val doctor_specialization: String?,
+    val appointment_date: String,
+    val appointment_time: String,
+    val status: String,
+    val created_at: String?
+)
+
+data class GetMyAppointmentsResponse(
+    val success: Boolean,
+    val message: String?,
+    val appointments: List<AppointmentBookingData>,
+    val count: Int?,
+    val user_email: String?
+)
 
 // Data Models
 data class UserData(val id: String, val name: String, val email: String, val userType: String)

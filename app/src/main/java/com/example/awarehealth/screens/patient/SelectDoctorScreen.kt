@@ -11,7 +11,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composablegg
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
@@ -106,19 +106,19 @@ fun SelectDoctorScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Select Doctor",
-                            fontSize = 32.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF2D3748),
-                            lineHeight = 38.sp
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Choose a specialist for your appointment",
-                            fontSize = 15.sp,
-                            color = Color(0xFF718096),
-                            lineHeight = 22.sp
+                    Text(
+                        text = "Select Doctor",
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF2D3748),
+                        lineHeight = 38.sp
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Choose a specialist for your appointment",
+                        fontSize = 15.sp,
+                        color = Color(0xFF718096),
+                        lineHeight = 22.sp
                         )
                     }
                     
@@ -170,11 +170,11 @@ fun SelectDoctorScreen(
                                     containerColor = Color(0xFFAEE4C1)
                                 )
                             ) {
-                                Text(
+                            Text(
                                     text = "Tap to Refresh",
                                     color = Color(0xFF2D3748),
-                                    fontSize = 14.sp
-                                )
+                                fontSize = 14.sp
+                            )
                             }
                         }
                     }

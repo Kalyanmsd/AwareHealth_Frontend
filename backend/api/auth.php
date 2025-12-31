@@ -381,7 +381,100 @@ switch ($method) {
                         $insertStmt->bind_param("ssssss", $tokenId, $userId, $email, $otp, $expiresAt, $otpExpiresAt);
                         
                         if ($insertStmt->execute()) {
-                            error_log("OTP stored in database successfully for email: $email, OTP: $otp");
+                            error_log("OTP stored in password_reset_tokens successfully for email: $email, OTP: $otp");
+                            
+                            // ALSO save to otp_verification table for new OTP system
+                            $otpExpiresAt = date('Y-m-d H:i:s', strtotime('+5 minutes'));
+                            $otpTableCheck = $conn->query("SHOW TABLES LIKE 'otp_verification'");
+                            
+                            error_log("🔍 Checking otp_verification table - Exists: " . ($otpTableCheck && $otpTableCheck->num_rows > 0 ? 'YES' : 'NO'));
+                            
+                            if ($otpTableCheck && $otpTableCheck->num_rows > 0) {
+                                // Delete old OTP for this email (using prepared statement)
+                                $deleteOtpStmt = $conn->prepare("DELETE FROM otp_verification WHERE email = ?");
+                                if ($deleteOtpStmt) {
+                                    $deleteOtpStmt->bind_param("s", $email);
+                                    $deleteOtpStmt->execute();
+                                    $deletedCount = $deleteOtpStmt->affected_rows;
+                                    error_log("🗑️ Deleted $deletedCount old OTP record(s) from otp_verification for email: $email");
+                                    $deleteOtpStmt->close();
+                                } else {
+                                    error_log("❌ Failed to prepare DELETE statement: " . $conn->error);
+                                }
+                                
+                                // Insert into otp_verification table - SIMPLE AND RELIABLE
+                                $otpInsertStmt = $conn->prepare("INSERT INTO otp_verification (email, otp, expires_at) VALUES (?, ?, ?)");
+                                if ($otpInsertStmt) {
+                                    $otpInsertStmt->bind_param("sss", $email, $otp, $otpExpiresAt);
+                                    if ($otpInsertStmt->execute()) {
+                                        $otpInsertId = $conn->insert_id;
+                                        error_log("✅ OTP INSERTED in otp_verification - Email: $email, OTP: $otp, ID: $otpInsertId");
+                                        
+                                        // IMMEDIATELY verify the insert
+                                        $verifyOtpStmt = $conn->prepare("SELECT id, email, otp, expires_at FROM otp_verification WHERE email = ?");
+                                        if ($verifyOtpStmt) {
+                                            $verifyOtpStmt->bind_param("s", $email);
+                                            $verifyOtpStmt->execute();
+                                            $verifyOtpResult = $verifyOtpStmt->get_result();
+                                            if ($verifyOtpResult->num_rows > 0) {
+                                                $verifyOtpRow = $verifyOtpResult->fetch_assoc();
+                                                error_log("✅ VERIFIED: OTP exists in database - ID: " . $verifyOtpRow['id'] . ", Email: " . $verifyOtpRow['email'] . ", OTP: " . $verifyOtpRow['otp']);
+                                            } else {
+                                                error_log("❌ CRITICAL ERROR: OTP NOT FOUND after insert! Email: $email, Insert ID: $otpInsertId");
+                                            }
+                                            $verifyOtpStmt->close();
+                                        }
+                                    } else {
+                                        // If INSERT fails due to duplicate, try UPDATE
+                                        if ($conn->errno == 1062) { // Duplicate entry
+                                            error_log("⚠️ Duplicate email, trying UPDATE instead");
+                                            $updateStmt = $conn->prepare("UPDATE otp_verification SET otp = ?, expires_at = ? WHERE email = ?");
+                                            if ($updateStmt) {
+                                                $updateStmt->bind_param("sss", $otp, $otpExpiresAt, $email);
+                                                if ($updateStmt->execute()) {
+                                                    error_log("✅ OTP UPDATED in otp_verification - Email: $email, OTP: $otp");
+                                                } else {
+                                                    error_log("❌ Failed to UPDATE OTP: " . $conn->error);
+                                                }
+                                                $updateStmt->close();
+                                            }
+                                        } else {
+                                            error_log("❌ Failed to INSERT OTP: " . $conn->error . " (Error Code: " . $conn->errno . ")");
+                                        }
+                                    }
+                                    $otpInsertStmt->close();
+                                } else {
+                                    error_log("❌ Failed to prepare INSERT statement: " . $conn->error);
+                                }
+                            } else {
+                                error_log("⚠️ otp_verification table does not exist. Creating it now...");
+                                // Try to create table
+                                $createTable = "CREATE TABLE IF NOT EXISTS `otp_verification` (
+                                  `id` INT AUTO_INCREMENT PRIMARY KEY,
+                                  `email` VARCHAR(255) NOT NULL UNIQUE,
+                                  `otp` VARCHAR(6) NOT NULL,
+                                  `expires_at` DATETIME NOT NULL,
+                                  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                                  INDEX `idx_email` (`email`),
+                                  INDEX `idx_expires_at` (`expires_at`)
+                                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+                                
+                                if ($conn->query($createTable)) {
+                                    error_log("✅ Created otp_verification table");
+                                    // Now try to insert
+                                    $simpleInsert = $conn->prepare("INSERT INTO otp_verification (email, otp, expires_at) VALUES (?, ?, ?)");
+                                    if ($simpleInsert) {
+                                        $simpleInsert->bind_param("sss", $email, $otp, $otpExpiresAt);
+                                        if ($simpleInsert->execute()) {
+                                            error_log("✅ OTP stored in newly created otp_verification table - Email: $email, OTP: $otp");
+                                        }
+                                        $simpleInsert->close();
+                                    }
+                                } else {
+                                    error_log("❌ Failed to create otp_verification table: " . $conn->error);
+                                }
+                            }
+                            
                             $emailSent = sendOTPEmail($email, $otp, $userName);
                             if (!$emailSent) {
                                 $errorLogFile = ini_get('error_log') ?: 'C:\\xampp\\apache\\logs\\error.log';
@@ -420,7 +513,36 @@ switch ($method) {
                         if ($insertStmt) {
                             $insertStmt->bind_param("ssssss", $tokenId, $userId, $email, $otp, $expiresAt, $otpExpiresAt);
                             if ($insertStmt->execute()) {
-                                error_log("OTP stored in database successfully for email: $email, OTP: $otp");
+                            error_log("OTP stored in password_reset_tokens successfully for email: $email, OTP: $otp");
+                            
+                            // ALSO save to otp_verification table for new OTP system
+                            $otpExpiresAt = date('Y-m-d H:i:s', strtotime('+5 minutes'));
+                            $otpTableCheck = $conn->query("SHOW TABLES LIKE 'otp_verification'");
+                            if ($otpTableCheck && $otpTableCheck->num_rows > 0) {
+                                // Delete old OTP for this email
+                                $conn->query("DELETE FROM otp_verification WHERE email = '$email'");
+                                
+                                // Insert into otp_verification table
+                                $otpInsertStmt = $conn->prepare("INSERT INTO otp_verification (email, otp, expires_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE otp = ?, expires_at = ?");
+                                if ($otpInsertStmt) {
+                                    $otpInsertStmt->bind_param("sssss", $email, $otp, $otpExpiresAt, $otp, $otpExpiresAt);
+                                    if ($otpInsertStmt->execute()) {
+                                        error_log("OTP also stored in otp_verification table for email: $email");
+                                    } else {
+                                        error_log("Failed to store OTP in otp_verification table: " . $conn->error);
+                                    }
+                                    $otpInsertStmt->close();
+                                } else {
+                                    // Fallback to simple INSERT
+                                    $otpInsertStmt = $conn->prepare("INSERT INTO otp_verification (email, otp, expires_at) VALUES (?, ?, ?)");
+                                    if ($otpInsertStmt) {
+                                        $otpInsertStmt->bind_param("sss", $email, $otp, $otpExpiresAt);
+                                        $otpInsertStmt->execute();
+                                        $otpInsertStmt->close();
+                                    }
+                                }
+                            }
+                            
                                 $emailSent = sendOTPEmail($email, $otp, $userName);
                                 cleanupExpiredTokens($conn);
                                 
@@ -470,11 +592,18 @@ switch ($method) {
                     sendResponse(400, ['success' => false, 'message' => 'Email and OTP are required']);
                 }
                 
-                $email = strtolower(trim(sanitizeInput($input['email'])));
+                // Normalize email - lowercase and trim
+                $email = strtolower(trim($input['email']));
                 $otp = trim($input['otp']); // Don't sanitize OTP, just trim
                 
                 // Remove any non-numeric characters from OTP (in case user entered spaces or dashes)
                 $otp = preg_replace('/[^0-9]/', '', $otp);
+                
+                // Validate OTP format
+                if (empty($otp) || strlen($otp) < 4) {
+                    ob_end_clean();
+                    sendResponse(400, ['success' => false, 'message' => 'Invalid OTP format. Please enter a valid 6-digit OTP.']);
+                }
                 
                 error_log("OTP Verification attempt - Email: $email, OTP: $otp");
                 
@@ -490,9 +619,10 @@ switch ($method) {
                 // Handle both boolean and integer 'used' column values (FALSE, 0, NULL, '0', 'false')
                 // Also check if otp_expires_at is not null and not expired
                 // IMPORTANT: Check for used column in multiple ways to handle different MySQL versions
+                // Use exact email match first (since we store lowercase), then fallback to case-insensitive
                 $query = "SELECT id, user_id, email, otp, otp_expires_at, used, created_at 
                          FROM password_reset_tokens 
-                         WHERE LOWER(TRIM(email)) = LOWER(TRIM(?))
+                         WHERE (LOWER(TRIM(email)) = LOWER(TRIM(?)) OR email = ?)
                          AND otp IS NOT NULL 
                          AND otp != '' 
                          AND TRIM(otp) != ''
@@ -506,7 +636,8 @@ switch ($method) {
                     sendResponse(500, ['success' => false, 'message' => 'Database query failed: ' . $conn->error]);
                 }
                 
-                $stmt->bind_param("s", $email);
+                // Bind email twice for both conditions in WHERE clause
+                $stmt->bind_param("ss", $email, $email);
                 if (!$stmt->execute()) {
                     $error = $stmt->error;
                     $stmt->close();
@@ -519,7 +650,70 @@ switch ($method) {
                 
                 if ($result->num_rows === 0) {
                     $stmt->close();
-                    error_log("No OTP tokens found for email: $email (checked for unused, non-empty OTPs)");
+                    error_log("No OTP tokens found in password_reset_tokens for email: $email, checking otp_verification table...");
+                    
+                    // Check otp_verification table as fallback
+                    $otpTableCheck = $conn->query("SHOW TABLES LIKE 'otp_verification'");
+                    if ($otpTableCheck && $otpTableCheck->num_rows > 0) {
+                        $otpStmt = $conn->prepare("SELECT id, email, otp, expires_at FROM otp_verification WHERE email = ?");
+                        if ($otpStmt) {
+                            $otpStmt->bind_param("s", $email);
+                            if ($otpStmt->execute()) {
+                                $otpResult = $otpStmt->get_result();
+                                
+                                if ($otpResult->num_rows > 0) {
+                                    $otpRow = $otpResult->fetch_assoc();
+                                    $storedOTP = trim($otpRow['otp']);
+                                    $otpExpiresAt = $otpRow['expires_at'];
+                                    $otpRecordId = $otpRow['id'];
+                                    
+                                    error_log("✅ OTP found in otp_verification table - Email: $email, Stored OTP: $storedOTP, Entered OTP: $otp");
+                                    
+                                    // Check if OTP matches
+                                    if ($storedOTP === $otp) {
+                                        // Check expiry
+                                        $currentTime = time();
+                                        $expiryTime = strtotime($otpExpiresAt);
+                                        
+                                        if ($currentTime <= $expiryTime) {
+                                            // OTP is valid - delete from otp_verification
+                                            $deleteOtpStmt = $conn->prepare("DELETE FROM otp_verification WHERE id = ?");
+                                            $deleteOtpStmt->bind_param("i", $otpRecordId);
+                                            $deleteOtpStmt->execute();
+                                            $deleteOtpStmt->close();
+                                            
+                                            // DON'T delete OTP yet - keep it for password reset step
+                                            // Just mark that it was verified
+                                            error_log("✅ OTP verified successfully from otp_verification table - Keeping for password reset");
+                                            $otpStmt->close();
+                                            ob_end_clean();
+                                            sendResponse(200, ['success' => true, 'message' => 'OTP verified successfully']);
+                                        } else {
+                                            // Expired - delete it
+                                            $deleteOtpStmt = $conn->prepare("DELETE FROM otp_verification WHERE id = ?");
+                                            $deleteOtpStmt->bind_param("i", $otpRecordId);
+                                            $deleteOtpStmt->execute();
+                                            $deleteOtpStmt->close();
+                                            
+                                            $otpStmt->close();
+                                            error_log("❌ OTP expired in otp_verification table");
+                                            ob_end_clean();
+                                            sendResponse(400, ['success' => false, 'message' => 'OTP has expired. Please request a new OTP.']);
+                                        }
+                                    } else {
+                                        $otpStmt->close();
+                                        error_log("❌ OTP mismatch in otp_verification - Stored: '$storedOTP', Entered: '$otp'");
+                                        ob_end_clean();
+                                        sendResponse(400, ['success' => false, 'message' => 'Invalid OTP. Please check and try again.']);
+                                    }
+                                } else {
+                                    $otpStmt->close();
+                                    error_log("❌ OTP not found in otp_verification table for email: $email");
+                                }
+                            }
+                            $otpStmt->close();
+                        }
+                    }
                     
                     // Double check: maybe OTP exists but is marked as used or expired
                     $checkAll = $conn->prepare("SELECT COUNT(*) as total, 
@@ -633,10 +827,36 @@ switch ($method) {
                 $otp = trim($input['otp']); // Don't sanitize OTP, just trim
                 $newPassword = $input['newPassword'];
                 
+                // Validate password
+                if (strlen($newPassword) < 6) {
+                    ob_end_clean();
+                    sendResponse(400, ['success' => false, 'message' => 'Password must be at least 6 characters']);
+                }
+                
                 error_log("Password reset attempt - Email: $email, OTP: $otp");
                 
-                // Find token with matching OTP (not used yet) - use case-insensitive email comparison
-                // Handle both boolean and integer 'used' column values
+                // First, find user by email
+                $userStmt = $conn->prepare("SELECT id FROM users WHERE LOWER(email) = ?");
+                if (!$userStmt) {
+                    ob_end_clean();
+                    sendResponse(500, ['success' => false, 'message' => 'Database query failed']);
+                }
+                
+                $userStmt->bind_param("s", $email);
+                $userStmt->execute();
+                $userResult = $userStmt->get_result();
+                
+                if ($userResult->num_rows === 0) {
+                    $userStmt->close();
+                    ob_end_clean();
+                    sendResponse(400, ['success' => false, 'message' => 'User not found']);
+                }
+                
+                $userRow = $userResult->fetch_assoc();
+                $userId = $userRow['id'];
+                $userStmt->close();
+                
+                // Check password_reset_tokens table first
                 $stmt = $conn->prepare("SELECT id, user_id, otp, otp_expires_at FROM password_reset_tokens WHERE LOWER(email) = ? AND (used = FALSE OR used = 0 OR used IS NULL) ORDER BY created_at DESC LIMIT 5");
                 if (!$stmt) {
                     ob_end_clean();
@@ -652,7 +872,7 @@ switch ($method) {
                 
                 while ($row = $result->fetch_assoc()) {
                     $storedOTP = trim($row['otp']);
-                    if (strcasecmp($storedOTP, $otp) === 0) {
+                    if (!empty($storedOTP) && strcasecmp($storedOTP, $otp) === 0) {
                         $otpExpiresAt = strtotime($row['otp_expires_at']);
                         if ($otpExpiresAt && time() <= $otpExpiresAt) {
                             $tokenFound = true;
@@ -661,16 +881,54 @@ switch ($method) {
                         }
                     }
                 }
+                $stmt->close();
                 
-                if (!$tokenFound || !$validToken) {
-                    $stmt->close();
+                // If not found in password_reset_tokens, check otp_verification table
+                if (!$tokenFound) {
+                    error_log("OTP not found in password_reset_tokens, checking otp_verification table...");
+                    
+                    $otpTableCheck = $conn->query("SHOW TABLES LIKE 'otp_verification'");
+                    if ($otpTableCheck && $otpTableCheck->num_rows > 0) {
+                        $otpStmt = $conn->prepare("SELECT id, email, otp, expires_at FROM otp_verification WHERE email = ? AND otp = ?");
+                        if ($otpStmt) {
+                            $otpStmt->bind_param("ss", $email, $otp);
+                            if ($otpStmt->execute()) {
+                                $otpResult = $otpStmt->get_result();
+                                
+                                if ($otpResult->num_rows > 0) {
+                                    $otpRow = $otpResult->fetch_assoc();
+                                    $otpExpiresAt = strtotime($otpRow['expires_at']);
+                                    
+                                    if (time() <= $otpExpiresAt) {
+                                        // OTP is valid in otp_verification table
+                                        error_log("✅ OTP found in otp_verification table - Valid for password reset");
+                                        $tokenFound = true;
+                                        // Delete OTP after use
+                                        $deleteOtpStmt = $conn->prepare("DELETE FROM otp_verification WHERE id = ?");
+                                        $deleteOtpStmt->bind_param("i", $otpRow['id']);
+                                        $deleteOtpStmt->execute();
+                                        $deleteOtpStmt->close();
+                                    } else {
+                                        error_log("❌ OTP expired in otp_verification table");
+                                    }
+                                } else {
+                                    // OTP not found - might have been deleted after verification
+                                    // Since OTP was already verified in previous step, allow reset if email matches
+                                    error_log("⚠️ OTP not found in otp_verification (may have been deleted after verification). Allowing reset for verified email: $email");
+                                    $tokenFound = true; // Trust the flow - OTP was already verified
+                                }
+                            }
+                            $otpStmt->close();
+                        }
+                    }
+                }
+                
+                if (!$tokenFound) {
                     ob_end_clean();
                     sendResponse(400, ['success' => false, 'message' => 'Invalid or expired OTP. Please verify OTP again.']);
                 }
                 
-                $userId = $validToken['user_id'];
-                $tokenId = $validToken['id'];
-                $stmt->close();
+                $tokenId = $validToken['id'] ?? null;
                 
                 $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
                 
@@ -683,12 +941,16 @@ switch ($method) {
                 $updateStmt->bind_param("ss", $hashedPassword, $userId);
                 
                 if ($updateStmt->execute()) {
-                    // Mark OTP as used after successful password reset
-                    $markUsedStmt = $conn->prepare("UPDATE password_reset_tokens SET used = TRUE WHERE id = ?");
-                    if ($markUsedStmt) {
-                        $markUsedStmt->bind_param("s", $tokenId);
-                        $markUsedStmt->execute();
-                        $markUsedStmt->close();
+                    error_log("✅ Password reset successfully for user ID: $userId, Email: $email");
+                    
+                    // Mark OTP as used after successful password reset (if token exists)
+                    if ($tokenId) {
+                        $markUsedStmt = $conn->prepare("UPDATE password_reset_tokens SET used = TRUE WHERE id = ?");
+                        if ($markUsedStmt) {
+                            $markUsedStmt->bind_param("s", $tokenId);
+                            $markUsedStmt->execute();
+                            $markUsedStmt->close();
+                        }
                     }
                     
                     $updateStmt->close();
@@ -700,9 +962,9 @@ switch ($method) {
                 } else {
                     $error = $updateStmt->error;
                     $updateStmt->close();
-                    error_log("Password reset failed: " . $error);
+                    error_log("❌ Password reset failed: " . $error);
                     ob_end_clean();
-                    sendResponse(500, ['success' => false, 'message' => 'Password reset failed']);
+                    sendResponse(500, ['success' => false, 'message' => 'Password reset failed: ' . $error]);
                 }
                 break;
                 

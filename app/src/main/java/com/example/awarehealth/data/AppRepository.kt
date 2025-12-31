@@ -1,6 +1,9 @@
 package com.example.awarehealth.data
 
-class AppRepository(private val apiService: ApiService?) {
+class AppRepository(
+    private val apiService: ApiService?,
+    private val flaskApiService: FlaskApiService? = RetrofitClient.flaskApiService
+) {
     suspend fun register(request: RegisterRequest) = apiService?.register(request)
     suspend fun login(request: LoginRequest) = apiService?.login(request)
     suspend fun doctorLogin(request: DoctorLoginRequest) = apiService?.doctorLogin(request)
@@ -14,4 +17,18 @@ class AppRepository(private val apiService: ApiService?) {
     suspend fun verifyOTP(request: VerifyOTPRequest) = apiService?.verifyOTP(request)
     suspend fun resetPassword(request: ResetPasswordRequest) = apiService?.resetPassword(request)
     suspend fun googleSignIn(request: GoogleSignInRequest) = apiService?.googleSignIn(request)
+    
+    // OTP Login System (new endpoints)
+    suspend fun sendOTP(request: SendOTPRequest) = apiService?.sendOTP(request)
+    suspend fun verifyOTPLogin(request: VerifyOTPLoginRequest) = apiService?.verifyOTPLogin(request)
+    suspend fun resendOTP(request: SendOTPRequest) = apiService?.resendOTP(request)
+    
+    // Appointment Booking System (new endpoints)
+    suspend fun getDoctorsList() = apiService?.getDoctorsList()
+    suspend fun bookAppointment(request: BookAppointmentRequest) = apiService?.bookAppointment(request)
+    suspend fun getMyAppointments(email: String) = apiService?.getMyAppointments(email)
+    
+    // AI Symptom Checker (Flask API)
+    suspend fun checkSymptoms(message: String, conversationId: String? = null) = flaskApiService?.checkSymptoms(SymptomRequest(message, conversationId))
+    suspend fun checkFlaskHealth() = flaskApiService?.checkHealth()
 }

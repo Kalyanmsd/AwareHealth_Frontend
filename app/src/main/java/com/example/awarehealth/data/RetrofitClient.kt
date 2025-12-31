@@ -24,10 +24,17 @@ object RetrofitClient {
     // For Android Emulator (AVD):
     // private const val BASE_URL = "http://10.0.2.2/AwareHealth/api/" // For Emulator
     // For Physical Android Device:
-    private const val BASE_URL = "http://192.168.1.11/AwareHealth/api/" // For Physical Device - Updated IP
+    private const val BASE_URL = "http://172.20.10.2/AwareHealth/api/" // For Physical Device - Correct IP
+    
+    // Flask AI API Base URL (Python Flask server on port 5000)
+    // For Physical Android Device:
+    private const val FLASK_BASE_URL = "http://172.20.10.2:5000/" // Flask AI API
+    // For Android Emulator (AVD):
+    // private const val FLASK_BASE_URL = "http://10.0.2.2:5000/" // Flask AI API for Emulator
     
     // Expose BASE_URL for error messages
     const val BASE_URL_PUBLIC = BASE_URL
+    const val FLASK_BASE_URL_PUBLIC = FLASK_BASE_URL
     
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
@@ -42,11 +49,23 @@ object RetrofitClient {
         .callTimeout(45, TimeUnit.SECONDS) // Total call timeout
         .build()
     
+    // PHP API Retrofit instance
     private val retrofit = Retrofit.Builder()
         .baseUrl(BASE_URL)
         .client(okHttpClient)
         .addConverterFactory(GsonConverterFactory.create())
         .build()
     
+    // Flask AI API Retrofit instance
+    private val flaskRetrofit = Retrofit.Builder()
+        .baseUrl(FLASK_BASE_URL)
+        .client(okHttpClient)
+        .addConverterFactory(GsonConverterFactory.create())
+        .build()
+    
+    // PHP API Service
     val apiService: ApiService = retrofit.create(ApiService::class.java)
+    
+    // Flask AI API Service
+    val flaskApiService: FlaskApiService = flaskRetrofit.create(FlaskApiService::class.java)
 }

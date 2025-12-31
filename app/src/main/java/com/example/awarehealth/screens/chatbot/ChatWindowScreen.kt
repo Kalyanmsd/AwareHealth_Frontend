@@ -267,29 +267,50 @@ fun ChatWindowScreen(
                             inputText = ""
                             errorMessage = null
                             
-                            // Send to API
+                            // Send to API - Try AI symptom checker first, then fallback to regular chatbot
                             scope.launch {
-                                val response = viewModel.sendMessage(
+                                // Try AI symptom checker first
+                                val (chatResponse, symptomResponse) = viewModel.sendMessageWithAI(
                                     message = userInput,
                                     conversationId = uiState.conversationId
                                 )
                                 
-                                if (response != null && response.success) {
-                                    // Add bot response to UI
+                                if (symptomResponse != null && symptomResponse.success) {
+                                    // AI symptom checker responded
+                                    val aiMessage = symptomResponse.message ?: "I've analyzed your symptoms."
+                                    
+                                    // Add AI response to UI
                                     messages.add(
                                         ChatMessage(
                                             id = (System.currentTimeMillis() + 1).toString(),
-                                            text = response.response,
+                                            text = aiMessage,
+                                            sender = "bot",
+                                            time = "Now"
+                                        )
+                                    )
+                                    
+                                    // If appointment is suggested (after days check), trigger booking prompt
+                                    if (symptomResponse.suggest_appointment == true && symptomResponse.conversation_state == "completed") {
+                                        // Small delay to show message first
+                                        kotlinx.coroutines.delay(500)
+                                        onBookingPrompt()
+                                    }
+                                } else if (chatResponse != null && chatResponse.success) {
+                                    // Regular chatbot responded
+                                    messages.add(
+                                        ChatMessage(
+                                            id = (System.currentTimeMillis() + 1).toString(),
+                                            text = chatResponse.response,
                                             sender = "bot",
                                             time = "Now"
                                         )
                                     )
                                 } else {
-                                    // Show error message - prioritize ViewModel error state
+                                    // Show error message
                                     val errorMsg = if (uiState.error != null) {
                                         uiState.error!!
-                                    } else if (response != null && !response.success) {
-                                        response.response
+                                    } else if (chatResponse != null && !chatResponse.success) {
+                                        chatResponse.response
                                     } else {
                                         "Unable to connect to server. Please check:\n1. Your internet connection\n2. Server is running\n3. Try again in a moment"
                                     }

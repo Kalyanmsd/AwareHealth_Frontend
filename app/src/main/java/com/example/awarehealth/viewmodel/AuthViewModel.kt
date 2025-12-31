@@ -218,7 +218,9 @@ class AuthViewModel(private val repository: AppRepository) : ViewModel() {
         _uiState.value = _uiState.value.copy(isLoading = true, error = null)
         viewModelScope.launch {
             try {
-                val request = ForgotPasswordRequest(email.trim())
+                // Normalize email to lowercase for consistent storage
+                val normalizedEmail = email.trim().lowercase()
+                val request = ForgotPasswordRequest(normalizedEmail)
                 val response = repository.forgotPassword(request)
                 
                 if (response?.isSuccessful == true && response.body() != null) {
@@ -279,7 +281,10 @@ class AuthViewModel(private val repository: AppRepository) : ViewModel() {
         _uiState.value = _uiState.value.copy(isLoading = true, error = null, isSuccess = false)
         viewModelScope.launch {
             try {
-                val request = VerifyOTPRequest(email.trim(), otp.trim())
+                // Normalize email to lowercase for consistent comparison
+                val normalizedEmail = email.trim().lowercase()
+                val normalizedOTP = otp.trim()
+                val request = VerifyOTPRequest(normalizedEmail, normalizedOTP)
                 val response = repository.verifyOTP(request)
 
                 if (response?.isSuccessful == true && response.body() != null) {
