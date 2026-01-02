@@ -33,21 +33,19 @@ data class SymptomRequest(
 )
 
 /**
- * Response model from symptom checker
+ * Response model from disease information chatbot
  */
 data class SymptomResponse(
     val success: Boolean,
-    val conversation_state: String? = null, // "analyzing", "asking_days", "completed"
-    val risk_level: String? = null, // "low", "medium", "high"
-    val confidence: Double? = null, // 0.0 to 100.0
+    val conversation_state: String? = null, // "waiting_for_disease", "asking_prevention", "asking_days", "completed"
+    val disease_name: String? = null, // Name of the disease
     val message: String? = null, // AI response message
-    val recommendation: String? = null, // Recommendation text
-    val symptoms: List<String>? = null, // List of identified symptoms
+    val symptoms: List<String>? = null, // List of disease symptoms
     val prevention_tips: List<String>? = null, // Prevention tips
+    val food_recommendations: List<String>? = null, // Food recommendations
     val days_suffering: Int? = null, // Number of days user has been suffering
     val suggest_appointment: Boolean? = null, // Whether to suggest appointment
-    val urgency: String? = null, // "immediate", "soon", "optional"
-    val hospital: HospitalInfo? = null, // Hospital suggestion
+    val available_diseases: List<String>? = null, // Available diseases if disease not found
     val error: String? = null // Error message if any
 )
 

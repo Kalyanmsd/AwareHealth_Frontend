@@ -10,7 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -35,11 +35,6 @@ data class ChatConversation(
     val unread: Boolean
 )
 
-data class QuickTopic(
-    val emoji: String,
-    val label: String,
-    val query: String
-)
 
 /* ---------- SCREEN ---------- */
 
@@ -78,12 +73,6 @@ fun ChatbotMainScreen(
         )
     )
 
-    val quickTopics = listOf(
-        QuickTopic("🤒", "Fever", "I have a fever"),
-        QuickTopic("🤧", "Cold & Flu", "Cold symptoms"),
-        QuickTopic("😷", "Cough", "I have a cough"),
-        QuickTopic("🤕", "Headache", "Headache relief")
-    )
 
     Box(
         modifier = Modifier
@@ -103,131 +92,127 @@ fun ChatbotMainScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .shadow(
-                        elevation = 4.dp,
-                        shape = RoundedCornerShape(24.dp),
-                        spotColor = Color.Black.copy(alpha = 0.1f)
+                        elevation = 6.dp,
+                        shape = RoundedCornerShape(28.dp),
+                        spotColor = Color(0xFFAEE4C1).copy(alpha = 0.3f)
                     )
-                    .background(Color(0xFFE9FFF4), RoundedCornerShape(24.dp))
-                    .padding(24.dp)
+                    .background(
+                        brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                            colors = listOf(
+                                Color(0xFFE9FFF4),
+                                Color(0xFFF0FDF4)
+                            )
+                        ),
+                        shape = RoundedCornerShape(28.dp)
+                    )
+                    .padding(28.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Dark blue square icon with stars
+                    // Enhanced icon with gradient background
                     Box(
                         modifier = Modifier
-                            .size(64.dp)
-                            .background(Color(0xFF1E3A5F), RoundedCornerShape(16.dp)),
+                            .size(72.dp)
+                            .shadow(
+                                elevation = 4.dp,
+                                shape = RoundedCornerShape(20.dp),
+                                spotColor = Color.Black.copy(alpha = 0.1f)
+                            )
+                            .background(
+                                brush = androidx.compose.ui.graphics.Brush.linearGradient(
+                                    colors = listOf(
+                                        Color(0xFF1E3A5F),
+                                        Color(0xFF2D4A6F)
+                                    )
+                                ),
+                                shape = RoundedCornerShape(20.dp)
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("✨", fontSize = 32.sp)
+                        Text("✨", fontSize = 36.sp)
                     }
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Column {
+                    Spacer(modifier = Modifier.width(20.dp))
+                    Column(
+                        modifier = Modifier.weight(1f)
+                    ) {
                         Text(
                             "AI Health Assistant",
-                            fontSize = 22.sp,
+                            fontSize = 24.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF2D3748),
-                            lineHeight = 28.sp
+                            lineHeight = 30.sp
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            "Get instant health guidance",
+                            "Get instant health guidance and personalized care recommendations",
                             fontSize = 15.sp,
                             color = Color(0xFF4A5568),
-                            lineHeight = 20.sp
+                            lineHeight = 22.sp
                         )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            /* ---------- SEARCH FIELD ---------- */
-            TextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .shadow(
-                        elevation = 2.dp,
-                        shape = RoundedCornerShape(20.dp),
-                        spotColor = Color.Black.copy(alpha = 0.05f)
-                    ),
-                placeholder = {
-                    Text(
-                        "Search or ask a question...",
-                        color = Color(0xFF718096),
-                        fontSize = 15.sp
-                    )
-                },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = "Search",
-                        tint = Color(0xFF718096)
-                    )
-                },
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color(0xFFFFE8F5),
-                    unfocusedContainerColor = Color(0xFFFFE8F5),
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    disabledIndicatorColor = Color.Transparent
-                ),
-                shape = RoundedCornerShape(20.dp),
-                singleLine = true
-            )
-
-            Spacer(modifier = Modifier.height(28.dp))
-
-            /* ---------- QUICK TOPICS ---------- */
-            Text(
-                "Quick Topics",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF2D3748)
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                quickTopics.forEach { topic ->
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .shadow(
-                                elevation = 2.dp,
-                                shape = CircleShape,
-                                spotColor = Color.Black.copy(alpha = 0.05f)
-                            )
-                            .background(Color.White, CircleShape)
-                            .clickable { onNewChat(topic.query) }
-                            .padding(vertical = 20.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(topic.emoji, fontSize = 32.sp)
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                topic.label,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = Color(0xFF2D3748),
-                                lineHeight = 16.sp
-                            )
-                        }
                     }
                 }
             }
 
             Spacer(modifier = Modifier.height(32.dp))
+
+            /* ---------- SEARCH FIELD ---------- */
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .shadow(
+                        elevation = 4.dp,
+                        shape = RoundedCornerShape(24.dp),
+                        spotColor = Color.Black.copy(alpha = 0.08f)
+                    )
+                    .background(Color.White, RoundedCornerShape(24.dp))
+                    .clickable { onNewChat(null) }
+            ) {
+                TextField(
+                    value = searchQuery,
+                    onValueChange = { 
+                        searchQuery = it
+                        if (it.isNotBlank()) {
+                            onNewChat(it)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = {
+                        Text(
+                            "Ask me anything about your health...",
+                            color = Color(0xFF718096),
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "Search",
+                            tint = Color(0xFFAEE4C1),
+                            modifier = Modifier.size(24.dp)
+                        )
+                    },
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.White,
+                        unfocusedContainerColor = Color.White,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        disabledIndicatorColor = Color.Transparent,
+                        focusedTextColor = Color(0xFF2D3748),
+                        unfocusedTextColor = Color(0xFF2D3748)
+                    ),
+                    shape = RoundedCornerShape(24.dp),
+                    singleLine = true,
+                    textStyle = androidx.compose.ui.text.TextStyle(
+                        fontSize = 16.sp,
+                        color = Color(0xFF2D3748),
+                        fontWeight = FontWeight.Medium
+                    )
+                )
+            }
+
+            Spacer(modifier = Modifier.height(36.dp))
 
             /* ---------- RECENT CONVERSATIONS ---------- */
             Row(
@@ -237,78 +222,113 @@ fun ChatbotMainScreen(
             ) {
                 Text(
                     "Recent Conversations",
-                    fontSize = 18.sp,
+                    fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF2D3748)
                 )
                 Text(
                     "Settings",
                     fontSize = 15.sp,
-                    color = Color(0xFF4A5568),
-                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFFAEE4C1),
+                    fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.clickable { onSettings() }
                 )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            conversations.forEach { chat ->
+            if (conversations.isEmpty()) {
+                // Empty state
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .shadow(
-                            elevation = 3.dp,
-                            shape = RoundedCornerShape(20.dp),
-                            spotColor = Color.Black.copy(alpha = 0.08f)
-                        )
-                        .background(
-                            if (chat.unread)
-                                Color(0xFFE9FFF4)
-                            else
-                                Color.White,
-                            RoundedCornerShape(20.dp)
-                        )
-                        .clickable { onOpenChat(chat.id) }
-                        .padding(20.dp)
+                        .padding(vertical = 48.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Column {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.Top
-                        ) {
-                            Text(
-                                chat.title,
-                                fontSize = 16.sp,
-                                fontWeight = if (chat.unread)
-                                    FontWeight.Bold
-                                else
-                                    FontWeight.SemiBold,
-                                color = Color(0xFF2D3748),
-                                modifier = Modifier.weight(1f)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                chat.time,
-                                fontSize = 12.sp,
-                                color = Color(0xFF718096),
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
                         Text(
-                            chat.lastMessage,
+                            "💬",
+                            fontSize = 64.sp
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            "No conversations yet",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF4A5568)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "Start a new chat to get health guidance",
                             fontSize = 14.sp,
-                            color = Color(0xFF4A5568),
-                            lineHeight = 20.sp,
-                            maxLines = 2
+                            color = Color(0xFF718096)
                         )
                     }
                 }
+            } else {
+                conversations.forEach { chat ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .shadow(
+                                elevation = 4.dp,
+                                shape = RoundedCornerShape(22.dp),
+                                spotColor = if (chat.unread) 
+                                    Color(0xFFAEE4C1).copy(alpha = 0.2f)
+                                else
+                                    Color.Black.copy(alpha = 0.06f)
+                            )
+                            .background(
+                                if (chat.unread)
+                                    Color(0xFFE9FFF4)
+                                else
+                                    Color.White,
+                                RoundedCornerShape(22.dp)
+                            )
+                            .clickable { onOpenChat(chat.id) }
+                            .padding(22.dp)
+                    ) {
+                        Column {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Text(
+                                    chat.title,
+                                    fontSize = 17.sp,
+                                    fontWeight = if (chat.unread)
+                                        FontWeight.Bold
+                                    else
+                                        FontWeight.SemiBold,
+                                    color = Color(0xFF2D3748),
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    chat.time,
+                                    fontSize = 13.sp,
+                                    color = Color(0xFF718096),
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            Text(
+                                chat.lastMessage,
+                                fontSize = 15.sp,
+                                color = Color(0xFF4A5568),
+                                lineHeight = 22.sp,
+                                maxLines = 2
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+                }
             }
 
             Spacer(modifier = Modifier.height(80.dp))
@@ -321,16 +341,24 @@ fun ChatbotMainScreen(
                 .padding(24.dp)
                 .size(64.dp)
                 .shadow(
-                    elevation = 6.dp,
+                    elevation = 8.dp,
                     shape = CircleShape,
-                    spotColor = Color.Black.copy(alpha = 0.15f)
+                    spotColor = Color(0xFFAEE4C1).copy(alpha = 0.4f)
                 )
-                .background(Color(0xFFAEE4C1), CircleShape)
+                .background(
+                    brush = androidx.compose.ui.graphics.Brush.radialGradient(
+                        colors = listOf(
+                            Color(0xFFAEE4C1),
+                            Color(0xFF8DD4B0)
+                        )
+                    ),
+                    shape = CircleShape
+                )
                 .clickable { onNewChat(null) },
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = Icons.Default.MoreVert,
+                imageVector = Icons.Default.Add,
                 contentDescription = "New Chat",
                 tint = Color.White,
                 modifier = Modifier.size(32.dp)

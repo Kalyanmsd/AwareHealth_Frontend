@@ -539,6 +539,13 @@ fun AwareHealthNavGraph(
                     },
                     onBookingPrompt = {
                         navController.navigate(Screen.BookingPrompt.route)
+                    },
+                    onNavigateToSelectDoctor = {
+                        // Navigate directly to select doctor screen for booking
+                        navController.navigate(Screen.SelectDoctor.route) {
+                            // Clear chat window from back stack so user can't go back to it
+                            popUpTo(Screen.ChatWindow.route) { inclusive = true }
+                        }
                     }
                 )
             }

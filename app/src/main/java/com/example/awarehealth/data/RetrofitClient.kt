@@ -24,11 +24,13 @@ object RetrofitClient {
     // For Android Emulator (AVD):
     // private const val BASE_URL = "http://10.0.2.2/AwareHealth/api/" // For Emulator
     // For Physical Android Device:
-    private const val BASE_URL = "http://172.20.10.2/AwareHealth/api/" // For Physical Device - Correct IP
+    // Update this IP to match your computer's current IP address
+    // Find your IP: Run "ipconfig" in Command Prompt and look for "IPv4 Address"
+    private const val BASE_URL = "http://172.20.10.2/AwareHealth/api/" // For Physical Device - Updated IP
     
     // Flask AI API Base URL (Python Flask server on port 5000)
     // For Physical Android Device:
-    private const val FLASK_BASE_URL = "http://172.20.10.2:5000/" // Flask AI API
+    private const val FLASK_BASE_URL = "http://172.20.10.2:5000/" // Flask AI API - Updated IP
     // For Android Emulator (AVD):
     // private const val FLASK_BASE_URL = "http://10.0.2.2:5000/" // Flask AI API for Emulator
     
