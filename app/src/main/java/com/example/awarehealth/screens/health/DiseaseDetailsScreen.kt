@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -56,11 +57,18 @@ fun DiseaseDetailsScreen(
     onAskAI: () -> Unit,
     onViewPreventionTips: () -> Unit = {}
 ) {
-    // Create ViewModel
-    val viewModel: DiseaseDetailsViewModel = viewModel { 
+    // Create ViewModel with key based on diseaseId to ensure it reloads for different diseases
+    val viewModel: DiseaseDetailsViewModel = viewModel(key = diseaseId) { 
         DiseaseDetailsViewModel(repository, diseaseId)
     }
     val uiState by viewModel.uiState.collectAsState()
+    
+    // Reload if diseaseId changes
+    LaunchedEffect(diseaseId) {
+        if (diseaseId.isNotEmpty()) {
+            viewModel.retry()
+        }
+    }
 
     // Convert DiseaseData to DiseaseDetails format
     val diseaseData = uiState.disease
@@ -70,7 +78,7 @@ fun DiseaseDetailsScreen(
             emoji = diseaseData.emoji ?: "🦠",
             category = diseaseData.category ?: "General",
             severity = diseaseData.severity ?: "Unknown",
-            description = diseaseData.description,
+            description = diseaseData.description ?: "No description available",
             symptoms = diseaseData.symptoms ?: emptyList(),
             causes = diseaseData.causes ?: emptyList(),
             prevention = diseaseData.prevention ?: emptyList(),
@@ -175,8 +183,8 @@ fun DiseaseDetailsScreen(
             ) {
                 Spacer(modifier = Modifier.height(20.dp))
 
-            /* ---------- MAIN OVERVIEW CARD ---------- */
-            Box(
+                /* ---------- MAIN OVERVIEW CARD ---------- */
+                Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .shadow(
@@ -261,12 +269,12 @@ fun DiseaseDetailsScreen(
                         )
                     }
                 }
-            }
+                }
 
-            Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-            /* ---------- INFO CARDS (SIDE BY SIDE) ---------- */
-            Row(
+                /* ---------- INFO CARDS (SIDE BY SIDE) ---------- */
+                Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
@@ -282,57 +290,57 @@ fun DiseaseDetailsScreen(
                     backgroundColor = Color(0xFFAEE4C1),
                     modifier = Modifier.weight(1f)
                 )
-            }
+                }
 
-            Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
-            /* ---------- SYMPTOMS SECTION ---------- */
-            SectionCard(
+                /* ---------- SYMPTOMS SECTION ---------- */
+                SectionCard(
                 title = "Symptoms",
                 items = disease.symptoms,
                 backgroundColor = Color(0xFFE9FFF4),
                 icon = Icons.Default.Info
-            )
+                )
 
-            Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
-            /* ---------- CAUSES SECTION ---------- */
-            SectionCard(
+                /* ---------- CAUSES SECTION ---------- */
+                SectionCard(
                 title = "Causes",
                 items = disease.causes,
                 backgroundColor = Color(0xFFFFEAD6),
                 icon = Icons.Default.Info
-            )
+                )
 
-            Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
-            /* ---------- PREVENTION SECTION ---------- */
-            SectionCard(
+                /* ---------- PREVENTION SECTION ---------- */
+                SectionCard(
                 title = "Prevention",
                 items = disease.prevention,
                 backgroundColor = Color(0xFFE9FFF4),
                 icon = Icons.Default.Shield
-            )
+                )
 
-            Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
-            /* ---------- TREATMENT SECTION ---------- */
-            SectionCard(
+                /* ---------- TREATMENT SECTION ---------- */
+                SectionCard(
                 title = "Treatment",
                 items = disease.treatment,
                 backgroundColor = Color.White,
                 icon = Icons.Default.Medication
-            )
+                )
 
-            Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
-            /* ---------- WHEN TO SEE A DOCTOR ---------- */
-            WhenToSeeDoctorCard()
+                /* ---------- WHEN TO SEE A DOCTOR ---------- */
+                WhenToSeeDoctorCard()
 
-            Spacer(modifier = Modifier.height(28.dp))
+                Spacer(modifier = Modifier.height(28.dp))
 
-            /* ---------- ACTION BUTTONS ---------- */
-            Button(
+                /* ---------- ACTION BUTTONS ---------- */
+                Button(
                 onClick = onAskAI,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -356,9 +364,9 @@ fun DiseaseDetailsScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-            OutlinedButton(
+                OutlinedButton(
                 onClick = onViewPreventionTips,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -384,7 +392,7 @@ fun DiseaseDetailsScreen(
                     fontWeight = FontWeight.SemiBold,
                     letterSpacing = 0.3.sp
                 )
-            }
+                }
 
                 Spacer(modifier = Modifier.height(24.dp))
             }
@@ -395,7 +403,7 @@ fun DiseaseDetailsScreen(
 /* ---------- COMPONENTS ---------- */
 
 @Composable
-private fun InfoStatCard(
+fun InfoStatCard(
     title: String,
     value: String,
     backgroundColor: Color,
@@ -438,7 +446,7 @@ private fun InfoStatCard(
 }
 
 @Composable
-private fun SectionCard(
+fun SectionCard(
     title: String,
     items: List<String>,
     backgroundColor: Color,
@@ -477,27 +485,37 @@ private fun SectionCard(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            items.forEach { item ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 6.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Box(
+            if (items.isEmpty()) {
+                Text(
+                    text = "No information available",
+                    fontSize = 14.sp,
+                    color = Color(0xFF718096),
+                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            } else {
+                items.forEach { item ->
+                    Row(
                         modifier = Modifier
-                            .size(7.dp)
-                            .background(Color(0xFFAEE4C1), CircleShape)
-                            .padding(top = 9.dp)
-                    )
-                    Spacer(modifier = Modifier.width(14.dp))
-                    Text(
-                        text = item,
-                        fontSize = 15.sp,
-                        color = Color(0xFF4A5568),
-                        lineHeight = 24.sp,
-                        modifier = Modifier.weight(1f)
-                    )
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .background(Color(0xFFAEE4C1), CircleShape)
+                                .padding(top = 9.dp)
+                        )
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Text(
+                            text = item,
+                            fontSize = 15.sp,
+                            color = Color(0xFF4A5568),
+                            lineHeight = 24.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
         }
@@ -505,7 +523,7 @@ private fun SectionCard(
 }
 
 @Composable
-private fun WhenToSeeDoctorCard() {
+fun WhenToSeeDoctorCard() {
     val warningSigns = listOf(
         "Symptoms lasting more than 10 days",
         "High fever (above 101.3°F or 38.5°C)",

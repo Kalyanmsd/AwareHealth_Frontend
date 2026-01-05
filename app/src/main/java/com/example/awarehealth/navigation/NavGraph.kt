@@ -37,6 +37,15 @@ data class PatientAppointment(
     val status: String
 )
 
+// Data class to hold appointment info for confirmation screen
+data class BookedAppointmentInfo(
+    val doctorName: String,
+    val doctorSpecialty: String,
+    val appointmentDate: String,
+    val appointmentTime: String,
+    val location: String
+)
+
 @Composable
 fun AwareHealthNavGraph(
     navController: NavHostController = rememberNavController(),
@@ -53,6 +62,11 @@ fun AwareHealthNavGraph(
     var selectedDoctor by rememberSaveable { mutableStateOf<Doctor?>(null) }
     var selectedDateTime by rememberSaveable { mutableStateOf<SelectedDateTime?>(null) }
     var selectedUserType by rememberSaveable { mutableStateOf("") }
+    
+    // Store latest booked appointment data for confirmation screen
+    var latestAppointmentData by remember { 
+        mutableStateOf<BookedAppointmentInfo?>(null) 
+    }
     
     // Coroutine scope for API calls
     val coroutineScope = rememberCoroutineScope()
@@ -331,61 +345,102 @@ fun AwareHealthNavGraph(
                             coroutineScope.launch {
                                 try {
                                     val request = com.example.awarehealth.data.BookAppointmentRequest(
-                                        user_email = userEmail,
-                                        doctor_id = doctorId,
-                                        appointment_date = date,
-                                        appointment_time = formattedTime
+                                        patientEmail = userEmail,
+                                        doctorId = doctorId.toString(),
+                                        appointmentDate = date,
+                                        appointmentTime = formattedTime,
+                                        patientName = patientName
                                     )
                                     
                                     val response = repository.bookAppointment(request)
                                     
                                     if (response?.isSuccessful == true && response.body()?.success == true) {
-                                        val appointment = response.body()?.appointment
+                                        val appointmentData = response.body()?.appointment
                                         
-                                        if (appointment != null) {
-                                            // Also add to local list for UI
-                                            patientAppointments.add(
-                                                PatientAppointment(
-                                                    id = appointment.id.toString(),
-                                                    doctorName = appointment.doctor_name ?: selectedDoctor?.name ?: "",
-                                                    patientName = patientName,
-                                                    date = appointment.appointment_date,
-                                                    time = appointment.appointment_time,
-                                                    status = appointment.status
-                                                )
+                                        // Log the response for debugging
+                                        Log.d("NavGraph", "API Response - Success: ${response.body()?.success}")
+                                        Log.d("NavGraph", "Appointment Data: $appointmentData")
+                                        
+                                        // Use appointment data from API response with fallbacks
+                                        val appointmentId = appointmentData?.id?.toString() ?: System.currentTimeMillis().toString()
+                                        
+                                        // Extract doctor name - check both API response and selectedDoctor
+                                        val doctorName = when {
+                                            !appointmentData?.doctor_name.isNullOrEmpty() -> appointmentData!!.doctor_name!!
+                                            !selectedDoctor?.name.isNullOrEmpty() -> selectedDoctor!!.name
+                                            else -> "Dr. Doctor"
+                                        }
+                                        
+                                        val doctorSpecialty = when {
+                                            !appointmentData?.doctor_specialization.isNullOrEmpty() -> appointmentData!!.doctor_specialization!!
+                                            !selectedDoctor?.specialty.isNullOrEmpty() -> selectedDoctor!!.specialty!!
+                                            else -> "General Physician"
+                                        }
+                                        
+                                        val appointmentDate = when {
+                                            !appointmentData?.appointment_date.isNullOrEmpty() -> appointmentData!!.appointment_date!!
+                                            !date.isEmpty() -> date
+                                            else -> ""
+                                        }
+                                        
+                                        val appointmentTime = when {
+                                            !appointmentData?.appointment_time_display.isNullOrEmpty() -> appointmentData!!.appointment_time_display!!
+                                            !time.isEmpty() -> time
+                                            else -> ""
+                                        }
+                                        
+                                        val location = when {
+                                            !appointmentData?.location.isNullOrEmpty() -> appointmentData!!.location!!
+                                            !selectedDoctor?.location.isNullOrEmpty() -> selectedDoctor!!.location!!
+                                            else -> "Saveetha Hospital"
+                                        }
+                                        
+                                        // Log extracted values
+                                        Log.d("NavGraph", "Extracted Values:")
+                                        Log.d("NavGraph", "  Doctor Name: $doctorName")
+                                        Log.d("NavGraph", "  Doctor Specialty: $doctorSpecialty")
+                                        Log.d("NavGraph", "  Date: $appointmentDate")
+                                        Log.d("NavGraph", "  Time: $appointmentTime")
+                                        Log.d("NavGraph", "  Location: $location")
+                                        
+                                        patientAppointments.add(
+                                            PatientAppointment(
+                                                id = appointmentId,
+                                                doctorName = doctorName,
+                                                patientName = patientName,
+                                                date = appointmentDate,
+                                                time = appointmentTime,
+                                                status = appointmentData?.status ?: "pending"
                                             )
-                                            
-                                            Log.d("NavGraph", "Appointment created successfully: ${appointment.id}")
-                                            
-                                            navController.navigate(Screen.AppointmentSuccess.route) {
-                                                popUpTo(Screen.SelectDoctor.route) { inclusive = true }
-                                            }
-                                        } else {
-                                            Log.e("NavGraph", "Appointment data is null in response")
-                                            // Fallback to local storage
-                                            val appointmentId = System.currentTimeMillis().toString()
-                                            patientAppointments.add(
-                                                PatientAppointment(
-                                                    id = appointmentId,
-                                                    doctorName = selectedDoctor?.name ?: "",
-                                                    patientName = patientName,
-                                                    date = date,
-                                                    time = time,
-                                                    status = "pending"
-                                                )
-                                            )
-                                            navController.navigate(Screen.AppointmentSuccess.route) {
-                                                popUpTo(Screen.SelectDoctor.route) { inclusive = true }
-                                            }
+                                        )
+                                        
+                                        Log.d("NavGraph", "Appointment created successfully - Doctor: $doctorName")
+                                        
+                                        // Store appointment data in state
+                                        latestAppointmentData = BookedAppointmentInfo(
+                                            doctorName = doctorName,
+                                            doctorSpecialty = doctorSpecialty,
+                                            appointmentDate = appointmentDate,
+                                            appointmentTime = appointmentTime,
+                                            location = location
+                                        )
+                                        
+                                        // Navigate to AppointmentAccepted with appointment data
+                                        val route = Screen.AppointmentAccepted.createRoute(
+                                            doctorName = doctorName,
+                                            doctorSpecialty = doctorSpecialty,
+                                            appointmentDate = appointmentDate,
+                                            appointmentTime = appointmentTime,
+                                            location = location
+                                        )
+                                        
+                                        Log.d("NavGraph", "Navigating to route: $route")
+                                        
+                                        navController.navigate(route) {
+                                            popUpTo(Screen.SelectDoctor.route) { inclusive = true }
                                         }
                                     } else {
-                                        val errorMsg = response?.body()?.let { 
-                                            if (it is com.example.awarehealth.data.AppointmentResponse) {
-                                                it.toString()
-                                            } else {
-                                                "Failed to create appointment"
-                                            }
-                                        } ?: "Network error"
+                                        val errorMsg = response?.body()?.message ?: "Network error"
                                         
                                         Log.e("NavGraph", "Failed to create appointment: $errorMsg")
                                         
@@ -469,10 +524,63 @@ fun AwareHealthNavGraph(
             }
         }
 
-        composable(Screen.AppointmentAccepted.route) {
+        composable(
+            route = Screen.AppointmentAccepted.route,
+            arguments = listOf(
+                navArgument("doctorName") { type = NavType.StringType; defaultValue = "" },
+                navArgument("doctorSpecialty") { type = NavType.StringType; defaultValue = "" },
+                navArgument("appointmentDate") { type = NavType.StringType; defaultValue = "" },
+                navArgument("appointmentTime") { type = NavType.StringType; defaultValue = "" },
+                navArgument("location") { type = NavType.StringType; defaultValue = "" }
+            )
+        ) { backStackEntry ->
+            val doctorName = try {
+                java.net.URLDecoder.decode(backStackEntry.arguments?.getString("doctorName") ?: "", "UTF-8")
+            } catch (e: Exception) { backStackEntry.arguments?.getString("doctorName") ?: "" }
+            val doctorSpecialty = try {
+                java.net.URLDecoder.decode(backStackEntry.arguments?.getString("doctorSpecialty") ?: "", "UTF-8")
+            } catch (e: Exception) { backStackEntry.arguments?.getString("doctorSpecialty") ?: "" }
+            val appointmentDate = try {
+                java.net.URLDecoder.decode(backStackEntry.arguments?.getString("appointmentDate") ?: "", "UTF-8")
+            } catch (e: Exception) { backStackEntry.arguments?.getString("appointmentDate") ?: "" }
+            val appointmentTime = try {
+                java.net.URLDecoder.decode(backStackEntry.arguments?.getString("appointmentTime") ?: "", "UTF-8")
+            } catch (e: Exception) { backStackEntry.arguments?.getString("appointmentTime") ?: "" }
+            val location = try {
+                java.net.URLDecoder.decode(backStackEntry.arguments?.getString("location") ?: "", "UTF-8")
+            } catch (e: Exception) { backStackEntry.arguments?.getString("location") ?: "" }
+            
+            // Log all extracted values
+            Log.d("NavGraph", "=== AppointmentAccepted Screen Parameters ===")
+            Log.d("NavGraph", "Doctor Name: '$doctorName' (isEmpty: ${doctorName.isEmpty()})")
+            Log.d("NavGraph", "Doctor Specialty: '$doctorSpecialty' (isEmpty: ${doctorSpecialty.isEmpty()})")
+            Log.d("NavGraph", "Appointment Date: '$appointmentDate' (isEmpty: ${appointmentDate.isEmpty()})")
+            Log.d("NavGraph", "Appointment Time: '$appointmentTime' (isEmpty: ${appointmentTime.isEmpty()})")
+            Log.d("NavGraph", "Location: '$location' (isEmpty: ${location.isEmpty()})")
+            Log.d("NavGraph", "Latest Appointment Data: $latestAppointmentData")
+            
+            // Use route parameters if available, otherwise fall back to stored state
+            val finalDoctorName = if (doctorName.isNotEmpty()) doctorName else (latestAppointmentData?.doctorName ?: "")
+            val finalDoctorSpecialty = if (doctorSpecialty.isNotEmpty()) doctorSpecialty else (latestAppointmentData?.doctorSpecialty ?: "")
+            val finalAppointmentDate = if (appointmentDate.isNotEmpty()) appointmentDate else (latestAppointmentData?.appointmentDate ?: "")
+            val finalAppointmentTime = if (appointmentTime.isNotEmpty()) appointmentTime else (latestAppointmentData?.appointmentTime ?: "")
+            val finalLocation = if (location.isNotEmpty()) location else (latestAppointmentData?.location ?: "")
+            
+            Log.d("NavGraph", "=== Final Values to Display ===")
+            Log.d("NavGraph", "Final Doctor Name: '$finalDoctorName'")
+            Log.d("NavGraph", "Final Doctor Specialty: '$finalDoctorSpecialty'")
+            Log.d("NavGraph", "Final Appointment Date: '$finalAppointmentDate'")
+            Log.d("NavGraph", "Final Appointment Time: '$finalAppointmentTime'")
+            Log.d("NavGraph", "Final Location: '$finalLocation'")
+            
             Column {
                 Header(showBack = true, onBackClick = { navController.popBackStack() })
                 AppointmentAcceptedScreen(
+                    doctorName = finalDoctorName.takeIf { it.isNotEmpty() },
+                    doctorSpecialty = finalDoctorSpecialty.takeIf { it.isNotEmpty() },
+                    appointmentDate = finalAppointmentDate.takeIf { it.isNotEmpty() },
+                    appointmentTime = finalAppointmentTime.takeIf { it.isNotEmpty() },
+                    location = finalLocation.takeIf { it.isNotEmpty() },
                     onBack = { navController.popBackStack() },
                     onViewAll = {
                         navController.navigate(Screen.MyAppointments.route) {

@@ -1,87 +1,108 @@
 package com.example.awarehealth.data
 
 import retrofit2.Response
-import retrofit2.http.*
+import retrofit2.http.Body
+import retrofit2.http.GET
+import retrofit2.http.POST
+import retrofit2.http.Query
 
+/**
+ * PHP API Service Interface
+ * Connects to PHP backend API running on XAMPP
+ */
 interface ApiService {
-    // Auth
-    @POST("auth/register")
+    
+    // ========== Authentication Endpoints ==========
+    
+    @POST("auth.php/register")
     suspend fun register(@Body request: RegisterRequest): Response<AuthResponse>
     
-    @POST("auth/login")
+    @POST("auth.php/login")
     suspend fun login(@Body request: LoginRequest): Response<AuthResponse>
     
-    @POST("auth/doctor-login")
+    @POST("auth.php/doctor-login")
     suspend fun doctorLogin(@Body request: DoctorLoginRequest): Response<AuthResponse>
     
-    @POST("auth/forgot-password")
+    @POST("auth.php/forgot-password")
     suspend fun forgotPassword(@Body request: ForgotPasswordRequest): Response<ApiResponse>
     
-    @POST("auth/verify-otp")
+    @POST("auth.php/verify-otp")
     suspend fun verifyOTP(@Body request: VerifyOTPRequest): Response<ApiResponse>
     
-    @POST("auth/reset-password")
+    @POST("auth.php/reset-password")
     suspend fun resetPassword(@Body request: ResetPasswordRequest): Response<ApiResponse>
     
-    // OTP Login System (new otp_verification table)
-    @POST("send_otp")
-    suspend fun sendOTP(@Body request: SendOTPRequest): Response<OTPResponse>
-    
-    @POST("verify_otp")
-    suspend fun verifyOTPLogin(@Body request: VerifyOTPLoginRequest): Response<OTPResponse>
-    
-    @POST("resend_otp")
-    suspend fun resendOTP(@Body request: SendOTPRequest): Response<OTPResponse>
-    
-    // Appointment Booking System (new endpoints)
-    @GET("get_doctors")
-    suspend fun getDoctorsList(): Response<GetDoctorsResponse>
-    
-    @POST("book_appointment")
-    suspend fun bookAppointment(@Body request: BookAppointmentRequest): Response<BookAppointmentResponse>
-    
-    @GET("get_my_appointments")
-    suspend fun getMyAppointments(@Query("email") email: String): Response<GetMyAppointmentsResponse>
-    
-    @POST("auth/google-signin")
+    @POST("auth.php/google-signin")
     suspend fun googleSignIn(@Body request: GoogleSignInRequest): Response<AuthResponse>
     
-    // Doctors
-    @GET("doctors")
+    // ========== OTP Login Endpoints ==========
+    
+    @POST("send_otp.php")
+    suspend fun sendOTP(@Body request: SendOTPRequest): Response<ApiResponse>
+    
+    @POST("verify_otp.php")
+    suspend fun verifyOTPLogin(@Body request: VerifyOTPLoginRequest): Response<AuthResponse>
+    
+    @POST("resend_otp.php")
+    suspend fun resendOTP(@Body request: SendOTPRequest): Response<ApiResponse>
+    
+    // ========== Doctor Endpoints ==========
+    
+    @GET("doctors.php")
     suspend fun getDoctors(): Response<DoctorsResponse>
     
-    @GET("doctors/{id}")
-    suspend fun getDoctor(@Path("id") id: String): Response<DoctorResponse>
+    @GET("get_doctors.php")
+    suspend fun getDoctorsList(): Response<DoctorsResponse>
     
-    // Appointments
-    @GET("appointments")
+    // ========== Appointment Endpoints ==========
+    
+    @POST("appointments.php")
+    suspend fun createAppointment(@Body request: CreateAppointmentRequest): Response<ApiResponse>
+    
+    @GET("appointments.php")
     suspend fun getAppointments(@Query("userId") userId: String): Response<AppointmentsResponse>
     
-    @POST("appointments")
-    suspend fun createAppointment(@Body request: CreateAppointmentRequest): Response<AppointmentResponse>
+    @POST("book_appointment.php")
+    suspend fun bookAppointment(@Body request: BookAppointmentRequest): Response<ApiResponse>
     
-    @PUT("appointments/{id}")
-    suspend fun updateAppointment(@Path("id") id: String, @Body request: UpdateAppointmentRequest): Response<AppointmentResponse>
+    @GET("get_my_appointments.php")
+    suspend fun getMyAppointments(@Query("email") email: String): Response<AppointmentsResponse>
     
-    // Chatbot
-    @POST("chatbot/message")
+    // ========== Chat Endpoint ==========
+    
+    @POST("chatbot.php")
     suspend fun sendChatMessage(@Body request: ChatMessageRequest): Response<ChatMessageResponse>
     
-    // Health Info
-    @GET("health/diseases")
-    suspend fun getDiseases(@Query("category") category: String? = null, @Query("search") search: String? = null): Response<DiseasesResponse>
+    // ========== AI Chatbot Endpoint (PHP Proxy to Flask) ==========
     
-    @GET("health/diseases/{id}")
-    suspend fun getDisease(@Path("id") id: String): Response<DiseaseResponse>
+    /**
+     * AI Chatbot endpoint - PHP proxy to Flask
+     * Android calls PHP, PHP forwards to Flask, PHP returns response
+     * This prevents direct Flask connection issues
+     */
+    @POST("chat.php")
+    suspend fun sendAIChatMessage(@Body request: SymptomRequest): Response<SymptomResponse>
+    
+    // ========== Disease Endpoints ==========
+    
+    @GET("simple_diseases.php")
+    suspend fun getDiseases(
+        @Query("category") category: String? = null,
+        @Query("search") search: String? = null
+    ): Response<DiseasesResponse>
+    
+    @GET("simple_diseases.php")
+    suspend fun getDisease(@Query("id") id: String): Response<DiseaseResponse>
 }
 
-// Request Models
+// ========== Request Models ==========
+
 data class RegisterRequest(
     val name: String,
     val email: String,
     val password: String,
-    val phone: String,
-    val userType: String
+    val userType: String,
+    val phone: String? = null
 )
 
 data class LoginRequest(
@@ -95,158 +116,177 @@ data class DoctorLoginRequest(
     val password: String
 )
 
-data class ForgotPasswordRequest(val email: String)
+data class ForgotPasswordRequest(
+    val email: String
+)
 
-data class VerifyOTPRequest(val email: String, val otp: String)
+data class VerifyOTPRequest(
+    val email: String,
+    val otp: String
+)
 
-data class ResetPasswordRequest(val email: String, val otp: String, val newPassword: String)
+data class ResetPasswordRequest(
+    val email: String,
+    val otp: String,
+    val newPassword: String
+)
 
-data class GoogleSignInRequest(val idToken: String, val userType: String)
+data class GoogleSignInRequest(
+    val idToken: String,
+    val name: String? = null,
+    val email: String? = null,
+    val photoUrl: String? = null
+)
 
-// OTP Login System Requests
-data class SendOTPRequest(val email: String)
+data class SendOTPRequest(
+    val email: String
+)
 
-data class VerifyOTPLoginRequest(val email: String, val otp: String)
+data class VerifyOTPLoginRequest(
+    val email: String,
+    val otp: String
+)
 
 data class CreateAppointmentRequest(
-    val patientId: String,
+    val userId: String,
     val doctorId: String,
     val date: String,
     val time: String,
-    val symptoms: String
+    val reason: String? = null
 )
 
-data class UpdateAppointmentRequest(val status: String)
+data class BookAppointmentRequest(
+    val patientEmail: String,
+    val doctorId: String,
+    val appointmentDate: String,
+    val appointmentTime: String,
+    val reason: String? = null,
+    val patientName: String? = null,
+    val patientPhone: String? = null
+)
 
-data class ChatMessageRequest(val message: String, val conversationId: String?)
+data class ChatMessageRequest(
+    val message: String,
+    val conversationId: String? = null
+)
 
-// Response Models
+// ========== Response Models ==========
+
 data class AuthResponse(
     val success: Boolean,
-    val token: String?,
-    val user: UserData?,
-    val message: String?
+    val message: String? = null,
+    val user: UserData? = null,
+    val token: String? = null
 )
 
-data class ApiResponse(val success: Boolean, val message: String?, val error: String?)
-
-data class DoctorsResponse(val success: Boolean, val doctors: List<DoctorData>)
-
-data class DoctorResponse(val success: Boolean, val doctor: DoctorData)
-
-data class AppointmentsResponse(val success: Boolean, val appointments: List<AppointmentData>)
-
-data class AppointmentResponse(val success: Boolean, val appointment: AppointmentData)
-
-data class ChatMessageResponse(
-    val success: Boolean,
-    val response: String,
-    val conversationId: String
-)
-
-data class DiseasesResponse(val success: Boolean, val diseases: List<DiseaseData>)
-
-data class DiseaseResponse(val success: Boolean, val disease: DiseaseData)
-
-// OTP Response
-data class OTPResponse(
-    val success: Boolean,
-    val message: String?,
-    val otp: String? = null, // For testing
-    val expires_at: String? = null,
-    val inserted_id: Int? = null
-)
-
-// Appointment Booking Requests
-data class BookAppointmentRequest(
-    val user_email: String,
-    val doctor_id: Int,
-    val appointment_date: String,
-    val appointment_time: String
-)
-
-// Appointment Booking Responses
-data class GetDoctorsResponse(
-    val success: Boolean,
-    val message: String?,
-    val doctors: List<DoctorBookingData>,
-    val count: Int?,
-    val hospital: String?
-)
-
-data class DoctorBookingData(
-    val id: Int,
+data class UserData(
+    val id: String,
     val name: String,
-    val specialization: String,
-    val hospital: String,
-    val experience: String,
-    val available_days: String,
-    val available_time: String
+    val email: String,
+    val userType: String,
+    val phone: String? = null,
+    val photoUrl: String? = null
 )
 
-data class BookAppointmentResponse(
+data class ApiResponse(
     val success: Boolean,
-    val message: String?,
-    val appointment: AppointmentBookingData?
+    val message: String? = null,
+    val appointment: BookedAppointmentData? = null
 )
 
-data class AppointmentBookingData(
+data class BookedAppointmentData(
     val id: Int,
-    val user_email: String,
+    @com.google.gson.annotations.SerializedName("user_email")
+    val user_email: String? = null,
+    @com.google.gson.annotations.SerializedName("doctor_id")
     val doctor_id: Int,
-    val doctor_name: String?,
-    val doctor_specialization: String?,
+    @com.google.gson.annotations.SerializedName("doctor_name")
+    val doctor_name: String? = null,
+    @com.google.gson.annotations.SerializedName("doctor_specialization")
+    val doctor_specialization: String? = null,
+    val location: String? = null,
+    @com.google.gson.annotations.SerializedName("appointment_date")
     val appointment_date: String,
+    @com.google.gson.annotations.SerializedName("appointment_time")
     val appointment_time: String,
-    val status: String,
-    val created_at: String?
+    @com.google.gson.annotations.SerializedName("appointment_time_display")
+    val appointment_time_display: String? = null,
+    val status: String? = null,
+    @com.google.gson.annotations.SerializedName("created_at")
+    val created_at: String? = null
 )
 
-data class GetMyAppointmentsResponse(
+data class DoctorsResponse(
     val success: Boolean,
-    val message: String?,
-    val appointments: List<AppointmentBookingData>,
-    val count: Int?,
-    val user_email: String?
+    val message: String? = null,
+    val doctors: List<DoctorData>? = null
 )
-
-// Data Models
-data class UserData(val id: String, val name: String, val email: String, val userType: String)
 
 data class DoctorData(
     val id: String,
+    val doctorId: String? = null,
     val name: String,
-    val specialty: String,
-    val experience: String,
-    val rating: Double,
-    val availability: String,
-    val location: String
+    val specialty: String? = null,
+    val experience: String? = null,
+    val rating: Double? = null,
+    val availability: String? = null,
+    val location: String? = null,
+    val status: String? = null,
+    val email: String? = null,
+    val phone: String? = null
+)
+
+data class AppointmentsResponse(
+    val success: Boolean,
+    val message: String? = null,
+    val appointments: List<AppointmentData>? = null
 )
 
 data class AppointmentData(
     val id: String,
-    val patientId: String,
+    val patientId: String? = null,
+    val patientEmail: String? = null,
+    val patientName: String? = null,
     val doctorId: String,
+    val doctorName: String? = null,
     val date: String,
     val time: String,
-    val symptoms: String,
-    val status: String
+    val reason: String? = null,
+    val status: String? = null
+)
+
+data class ChatMessageResponse(
+    val success: Boolean,
+    val response: String,
+    val conversationId: String = ""
+)
+
+data class DiseasesResponse(
+    val success: Boolean,
+    val message: String? = null,
+    val diseases: List<DiseaseData>? = null
+)
+
+data class DiseaseResponse(
+    val success: Boolean,
+    val message: String? = null,
+    val disease: DiseaseData? = null
 )
 
 data class DiseaseData(
     val id: String,
     val name: String,
     val category: String? = null,
-    val severity: String? = null,
-    val emoji: String? = null,
-    val description: String,
+    val description: String? = null,
     val symptoms: List<String>? = null,
-    val causes: List<String>? = null,
     val prevention: List<String>? = null,
     val treatment: List<String>? = null,
+    val imageUrl: String? = null,
+    val emoji: String? = null,
+    val severity: String? = null,
+    val causes: List<String>? = null,
+    @com.google.gson.annotations.SerializedName("affectedPopulation")
     val affectedPopulation: String? = null,
     val duration: String? = null
 )
-
-
 

@@ -88,7 +88,7 @@ fun DiseaseListScreen(
                 name = diseaseData.name,
                 category = diseaseData.category ?: "General",
                 severity = mapSeverity(diseaseData.severity ?: "Moderate"),
-                description = diseaseData.description,
+                description = diseaseData.description ?: "No description available",
                 symptoms = diseaseData.symptoms ?: emptyList(),
                 emoji = diseaseData.emoji ?: "🏥"
             )

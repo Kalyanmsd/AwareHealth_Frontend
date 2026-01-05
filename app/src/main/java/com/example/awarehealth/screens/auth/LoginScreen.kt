@@ -260,14 +260,38 @@ fun LoginScreen(
         
         /* ---------- ERROR MESSAGE ---------- */
         errorMessage?.let { error ->
-            Text(
-                text = error,
-                color = Color(0xFFE53E3E),
-                fontSize = 14.sp,
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 4.dp, vertical = 8.dp)
-            )
+                    .padding(horizontal = 4.dp, vertical = 8.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFFFFEBEE)
+                ),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Text(
+                        text = if (error.contains("\n")) error.split("\n").firstOrNull() ?: error else error,
+                        color = Color(0xFFE53E3E),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (error.contains("\n")) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = error.substringAfter("\n").trim(),
+                            color = Color(0xFFC62828),
+                            fontSize = 13.sp,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            }
         }
         
         Spacer(modifier = Modifier.height(12.dp))

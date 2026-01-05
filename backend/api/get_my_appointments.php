@@ -68,23 +68,95 @@ if (!$tableCheck || $tableCheck->num_rows === 0) {
 }
 
 // Fetch appointments for user
-$stmt = $conn->prepare("
-    SELECT 
-        a.id,
-        a.user_email,
-        a.doctor_id,
-        a.appointment_date,
-        a.appointment_time,
-        a.status,
-        a.created_at,
-        d.name as doctor_name,
-        d.specialization as doctor_specialization,
-        d.hospital
-    FROM appointments a
-    JOIN doctors d ON a.doctor_id = d.id
-    WHERE a.user_email = ?
-    ORDER BY a.appointment_date DESC, a.appointment_time DESC
-");
+// Handle different column names (appointment_date/date, appointment_time/time)
+$columnsResult = $conn->query("SHOW COLUMNS FROM appointments");
+$hasAppointmentDate = false;
+$hasDate = false;
+$hasAppointmentTime = false;
+$hasTime = false;
+
+while ($col = $columnsResult->fetch_assoc()) {
+    if ($col['Field'] === 'appointment_date') $hasAppointmentDate = true;
+    if ($col['Field'] === 'date') $hasDate = true;
+    if ($col['Field'] === 'appointment_time') $hasAppointmentTime = true;
+    if ($col['Field'] === 'time') $hasTime = true;
+}
+
+// Check if doctors table has user_id
+$doctorsColumns = $conn->query("SHOW COLUMNS FROM doctors");
+$doctorsHasUserId = false;
+while ($col = $doctorsColumns->fetch_assoc()) {
+    if ($col['Field'] === 'user_id') {
+        $doctorsHasUserId = true;
+        break;
+    }
+}
+
+// Build column names based on what exists
+$dateColumn = $hasAppointmentDate ? 'a.appointment_date' : ($hasDate ? 'a.date' : 'a.appointment_date');
+$timeColumn = $hasAppointmentTime ? 'a.appointment_time' : ($hasTime ? 'a.time' : 'a.appointment_time');
+
+// Check doctors table columns for specialty/specialization
+$doctorsColumnsCheck = $conn->query("SHOW COLUMNS FROM doctors");
+$doctorsHasSpecialty = false;
+$doctorsHasSpecialization = false;
+$doctorsHasLocation = false;
+$doctorsHasHospital = false;
+
+while ($col = $doctorsColumnsCheck->fetch_assoc()) {
+    if ($col['Field'] === 'specialty') $doctorsHasSpecialty = true;
+    if ($col['Field'] === 'specialization') $doctorsHasSpecialization = true;
+    if ($col['Field'] === 'location') $doctorsHasLocation = true;
+    if ($col['Field'] === 'hospital') $doctorsHasHospital = true;
+}
+
+// Determine specialty column - prioritize 'specialty' if it exists
+$specialtyCol = $doctorsHasSpecialty ? 'd.specialty' : ($doctorsHasSpecialization ? 'd.specialization' : "'General'");
+$locationCol = $doctorsHasLocation ? 'd.location' : ($doctorsHasHospital ? 'd.hospital' : "'Saveetha Hospital'");
+
+// Build JOIN query - get doctor name from users table if user_id exists
+if ($doctorsHasUserId) {
+    // Use JOIN to get name from users table
+    $sql = "
+        SELECT 
+            a.id,
+            a.user_email,
+            a.doctor_id,
+            $dateColumn as appointment_date,
+            $timeColumn as appointment_time,
+            a.status,
+            a.created_at,
+            COALESCE(u.name, d.name, CONCAT('Dr. ', $specialtyCol)) as doctor_name,
+            $specialtyCol as doctor_specialization,
+            $locationCol as hospital
+        FROM appointments a
+        LEFT JOIN doctors d ON a.doctor_id = d.id
+        LEFT JOIN users u ON d.user_id = u.id
+        WHERE a.user_email = ?
+        ORDER BY $dateColumn DESC, $timeColumn DESC
+    ";
+} else {
+    // Fallback: doctors table doesn't have user_id
+    $sql = "
+        SELECT 
+            a.id,
+            a.user_email,
+            a.doctor_id,
+            $dateColumn as appointment_date,
+            $timeColumn as appointment_time,
+            a.status,
+            a.created_at,
+            COALESCE(d.name, CONCAT('Dr. ', $specialtyCol)) as doctor_name,
+            $specialtyCol as doctor_specialization,
+            $locationCol as hospital
+        FROM appointments a
+        LEFT JOIN doctors d ON a.doctor_id = d.id
+        WHERE a.user_email = ?
+        ORDER BY $dateColumn DESC, $timeColumn DESC
+    ";
+}
+
+$stmt = $conn->prepare($sql);
 
 if (!$stmt) {
     $conn->close();
@@ -102,17 +174,30 @@ $result = $stmt->get_result();
 
 $appointments = [];
 while ($row = $result->fetch_assoc()) {
+    // Format date properly (YYYY-MM-DD)
+    $appointmentDate = $row['appointment_date'];
+    // Format time properly (HH:MM or HH:MM:SS -> HH:MM AM/PM)
+    $appointmentTime = $row['appointment_time'];
+    
+    // Convert 24-hour time to 12-hour format if needed
+    if (strlen($appointmentTime) >= 5) {
+        $timeParts = explode(':', $appointmentTime);
+        $hour = (int)$timeParts[0];
+        $minute = $timeParts[1] ?? '00';
+        $ampm = $hour >= 12 ? 'PM' : 'AM';
+        $hour12 = $hour > 12 ? $hour - 12 : ($hour == 0 ? 12 : $hour);
+        $appointmentTime = sprintf('%d:%s %s', $hour12, $minute, $ampm);
+    }
+    
     $appointments[] = [
-        'id' => (int)$row['id'],
-        'user_email' => $row['user_email'],
-        'doctor_id' => (int)$row['doctor_id'],
-        'doctor_name' => $row['doctor_name'],
-        'doctor_specialization' => $row['doctor_specialization'],
-        'hospital' => $row['hospital'],
-        'appointment_date' => $row['appointment_date'],
-        'appointment_time' => $row['appointment_time'],
-        'status' => $row['status'],
-        'created_at' => $row['created_at']
+        'id' => (string)$row['id'], // Frontend expects String
+        'patientEmail' => $row['user_email'],
+        'doctorId' => (string)$row['doctor_id'], // Frontend expects String
+        'doctorName' => $row['doctor_name'] ?? 'Dr. ' . ($row['doctor_specialization'] ?? 'Doctor'),
+        'date' => $appointmentDate, // Frontend expects 'date' not 'appointment_date'
+        'time' => $appointmentTime, // Frontend expects 'time' not 'appointment_time'
+        'status' => strtolower($row['status'] ?? 'pending'),
+        'reason' => null
     ];
 }
 

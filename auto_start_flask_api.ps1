@@ -31,22 +31,38 @@ Write-Host "[INFO] Flask API is not running. Starting now..." -ForegroundColor Y
 # Change to Flask directory
 Set-Location $flaskDir
 
+# Get current IP address dynamically
+try {
+    $ipAddress = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { 
+        $_.IPAddress -like "192.168.*" -or 
+        $_.IPAddress -like "172.*" -or 
+        $_.IPAddress -like "10.*" 
+    } | Select-Object -First 1).IPAddress
+} catch {
+    $ipAddress = "YOUR_IP"  # Fallback if IP not found
+}
+
+if (-not $ipAddress) {
+    $ipAddress = "YOUR_IP"  # Fallback if IP not found
+}
+
 # Start Flask API in a new window
 $scriptBlock = {
-    Set-Location $using:flaskDir
+    param($flaskDir, $flaskFile, $ipAddr)
+    Set-Location $flaskDir
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "   Flask API Server (Auto-Started)" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "Server running on: http://localhost:5000" -ForegroundColor Green
-    Write-Host "Network access: http://172.20.10.2:5000" -ForegroundColor Green
+    Write-Host "Network access: http://$ipAddr:5000" -ForegroundColor Green
     Write-Host ""
     Write-Host "Keep this window open while developing!" -ForegroundColor Yellow
     Write-Host ""
-    python $using:flaskFile
+    python $flaskFile
 }
 
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "& {$scriptBlock}" -WindowStyle Normal
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "& {$scriptBlock} -flaskDir '$flaskDir' -flaskFile '$flaskFile' -ipAddr '$ipAddress'" -WindowStyle Normal
 
 # Wait a moment for Flask to start
 Start-Sleep -Seconds 3

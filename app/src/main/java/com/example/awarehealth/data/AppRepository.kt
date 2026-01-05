@@ -28,7 +28,9 @@ class AppRepository(
     suspend fun bookAppointment(request: BookAppointmentRequest) = apiService?.bookAppointment(request)
     suspend fun getMyAppointments(email: String) = apiService?.getMyAppointments(email)
     
-    // AI Symptom Checker (Flask API)
-    suspend fun checkSymptoms(message: String, conversationId: String? = null) = flaskApiService?.checkSymptoms(SymptomRequest(message, conversationId))
-    suspend fun checkFlaskHealth() = flaskApiService?.checkHealth()
+    // AI Symptom Checker (via PHP Proxy to Flask)
+    // Architecture: Android → PHP (chat.php) → Flask → PHP → Android
+    // This prevents direct Flask connection failures
+    suspend fun checkSymptoms(message: String, conversationId: String? = null) = apiService?.sendAIChatMessage(SymptomRequest(message, conversationId))
+    suspend fun checkFlaskHealth() = flaskApiService?.checkHealth()  // Keep direct health check for testing
 }

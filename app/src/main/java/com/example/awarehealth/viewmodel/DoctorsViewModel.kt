@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.awarehealth.data.AppRepository
 import com.example.awarehealth.data.DoctorData
 import com.example.awarehealth.data.DoctorsResponse
+import com.example.awarehealth.data.RetrofitClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -51,21 +52,8 @@ class DoctorsViewModel(private val repository: AppRepository) : ViewModel() {
                     Log.d("DoctorsViewModel", "Success: ${doctorsResponse.success}, Doctors count: ${doctorsResponse.doctors?.size ?: 0}")
                     
                     if (doctorsResponse.success) {
-                        val doctorsBookingData = doctorsResponse.doctors ?: emptyList()
-                        Log.d("DoctorsViewModel", "Loaded ${doctorsBookingData.size} available doctors")
-                        
-                        // Convert DoctorBookingData to DoctorData for UI
-                        val doctors = doctorsBookingData.map { bookingData ->
-                            DoctorData(
-                                id = bookingData.id.toString(),
-                                name = bookingData.name,
-                                specialty = bookingData.specialization,
-                                experience = bookingData.experience,
-                                rating = 4.5, // Default rating
-                                availability = "${bookingData.available_days} - ${bookingData.available_time}",
-                                location = bookingData.hospital
-                            )
-                        }
+                        val doctors = doctorsResponse.doctors ?: emptyList()
+                        Log.d("DoctorsViewModel", "Loaded ${doctors.size} available doctors")
                         
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
@@ -115,13 +103,18 @@ class DoctorsViewModel(private val repository: AppRepository) : ViewModel() {
                 }
             } catch (e: Exception) {
                 Log.e("DoctorsViewModel", "Exception loading doctors", e)
+                val baseUrl = RetrofitClient.BASE_URL_PUBLIC
                 val errorMsg = when {
-                    e.message?.contains("Failed to connect") == true -> 
-                        "Cannot connect to server. Check:\n1. XAMPP Apache is running\n2. Same Wi-Fi network\n3. IP: 172.20.10.2"
-                    e.message?.contains("timeout") == true -> 
+                    (e.message?.contains("Failed to connect", ignoreCase = true) ?: false) ||
+                    (e.message?.contains("Connection refused", ignoreCase = true) ?: false) ||
+                    e is java.net.ConnectException -> 
+                        "Cannot connect to server. Check:\n1. XAMPP Apache is running\n2. Same Wi-Fi network\n3. IP: $baseUrl"
+                    (e.message?.contains("timeout", ignoreCase = true) ?: false) ||
+                    e is java.net.SocketTimeoutException -> 
                         "Connection timeout. Server may be slow."
-                    e.message?.contains("Unable to resolve host") == true -> 
-                        "Cannot find server. Check IP: 172.20.10.2"
+                    (e.message?.contains("Unable to resolve host", ignoreCase = true) ?: false) ||
+                    (e.message?.contains("No address associated with hostname", ignoreCase = true) ?: false) -> 
+                        "Cannot find server. Check IP: $baseUrl"
                     else -> "Network error: ${e.message ?: "Unable to connect to server"}"
                 }
                 _uiState.value = _uiState.value.copy(

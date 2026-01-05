@@ -1,4 +1,5 @@
 @echo off
+setlocal enabledelayedexpansion
 REM Batch script to ensure Flask API is running
 REM This script checks if Flask API is running and starts it if needed
 
@@ -29,8 +30,16 @@ if %errorlevel% == 0 (
 REM Flask API is not running, start it
 echo [INFO] Flask API is not running. Starting now...
 
+REM Get current IP address
+for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /c:"IPv4 Address"') do (
+    set IP=%%a
+    set IP=!IP:~1!
+    goto :found_ip
+)
+:found_ip
+
 REM Start Flask API in a new window
-start "Flask API Server (Auto-Started)" cmd /k "cd /d %FLASK_DIR% && echo ======================================== && echo    Flask API Server (Auto-Started) && echo ======================================== && echo. && echo Server running on: http://localhost:5000 && echo Network access: http://172.20.10.2:5000 && echo. && echo Keep this window open while developing! && echo. && python %FLASK_FILE% && pause"
+start "Flask API Server (Auto-Started)" cmd /k "cd /d %FLASK_DIR% && echo ======================================== && echo    Flask API Server (Auto-Started) && echo ======================================== && echo. && echo Server running on: http://localhost:5000 && echo Network access: http://%IP%:5000 && echo. && echo Keep this window open while developing! && echo. && python %FLASK_FILE% && pause"
 
 REM Wait a moment for Flask to start
 timeout /t 3 /nobreak >nul

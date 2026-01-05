@@ -6,6 +6,7 @@ import com.example.awarehealth.data.AppRepository
 import com.example.awarehealth.data.ChatMessageRequest
 import com.example.awarehealth.data.ChatMessageResponse
 import com.example.awarehealth.data.SymptomResponse
+import com.example.awarehealth.data.RetrofitClient
 import com.google.gson.Gson
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -28,7 +29,7 @@ class ChatbotViewModel(private val repository: AppRepository) : ViewModel() {
     val uiState: StateFlow<ChatbotUiState> = _uiState.asStateFlow()
     
     /**
-     * Send message to chatbot API
+     * Send message to chatbot API (simple PHP backend)
      */
     suspend fun sendMessage(
         message: String,
@@ -103,12 +104,17 @@ class ChatbotViewModel(private val repository: AppRepository) : ViewModel() {
             Log.e("ChatbotViewModel", "Error type: ${e.javaClass.simpleName}")
             
             // Handle network or other exceptions
+            val baseUrl = RetrofitClient.BASE_URL_PUBLIC
+            val testUrl = "${baseUrl}chatbot/message"
+            
             val errorMsg = when {
                 e.message?.contains("Failed to connect", ignoreCase = true) == true || 
                 e.message?.contains("Unable to resolve host", ignoreCase = true) == true ||
                 e.message?.contains("Connection refused", ignoreCase = true) == true ||
-                e.message?.contains("Connection timed out", ignoreCase = true) == true -> 
-                    "Cannot connect to server.\n\nPlease check:\n1. Phone and computer on same Wi-Fi\n2. XAMPP Apache is running\n3. Test: http://172.20.10.2/AwareHealth/api/chatbot/message in phone browser"
+                e.message?.contains("Connection timed out", ignoreCase = true) == true ||
+                e is java.net.ConnectException ||
+                e is java.net.SocketTimeoutException -> 
+                    "Cannot connect to server.\n\nPlease check:\n1. Phone and computer on same Wi-Fi\n2. XAMPP Apache is running\n3. Test: $testUrl in phone browser"
                 e.message?.contains("timeout", ignoreCase = true) == true -> "Request timed out. Please try again."
                 e.message?.contains("Network is unreachable", ignoreCase = true) == true -> "Network unreachable. Please check your Wi-Fi connection."
                 e.message?.contains("Cleartext", ignoreCase = true) == true -> "Network security error. Please check app configuration."
@@ -189,11 +195,16 @@ class ChatbotViewModel(private val repository: AppRepository) : ViewModel() {
             }
         } catch (e: Exception) {
             Log.e("ChatbotViewModel", "Error checking symptoms", e)
+            val flaskUrl = RetrofitClient.FLASK_BASE_URL_PUBLIC
+            val testUrl = "${flaskUrl}health"
+            
             val errorMsg = when {
                 e.message?.contains("Failed to connect", ignoreCase = true) == true ||
                 e.message?.contains("Connection refused", ignoreCase = true) == true ||
-                e.message?.contains("Connection timed out", ignoreCase = true) == true ->
-                    "Cannot connect to AI service.\n\nPlease check:\n1. Flask API is running (python flask_api.py)\n2. Phone and computer on same Wi-Fi\n3. Test: http://172.20.10.2:5000/health in phone browser"
+                e.message?.contains("Connection timed out", ignoreCase = true) == true ||
+                e is java.net.ConnectException ||
+                e is java.net.SocketTimeoutException ->
+                    "Cannot connect to AI service.\n\nPlease check:\n1. Flask API is running (python flask_api.py)\n2. Phone and computer on same Wi-Fi\n3. Test: $testUrl in phone browser"
                 else -> "Error analyzing symptoms: ${e.message ?: "Unknown error"}"
             }
             _uiState.value = _uiState.value.copy(
@@ -218,17 +229,61 @@ class ChatbotViewModel(private val repository: AppRepository) : ViewModel() {
             null
         }
         
-        // Try AI symptom checker
-        val symptomResponse = checkSymptoms(message, symptomConvId)
+        // Try AI symptom checker first (but don't set errors - we'll fallback)
+        var symptomResponse: SymptomResponse? = null
+        var flaskFailed = false
+        
+        try {
+            // Temporarily disable error setting in checkSymptoms by catching and handling
+            val originalError = _uiState.value.error
+            symptomResponse = checkSymptoms(message, symptomConvId)
+            
+            // If checkSymptoms set an error, we'll handle it in fallback
+            if (_uiState.value.error != null && symptomResponse == null) {
+                flaskFailed = true
+            }
+        } catch (e: Exception) {
+            Log.w("ChatbotViewModel", "Flask API failed, falling back to PHP chatbot", e)
+            flaskFailed = true
+            symptomResponse = null
+        }
         
         if (symptomResponse != null && symptomResponse.success) {
             // AI responded successfully, return symptom response
-            // Don't call regular chatbot
+            // Clear any previous errors
+            _uiState.value = _uiState.value.copy(error = null)
             return Pair(null, symptomResponse)
         } else {
             // AI failed or not available, fall back to regular chatbot
-            val chatResponse = sendMessage(message, conversationId)
-            return Pair(chatResponse, null)
+            // Clear Flask API errors before trying PHP chatbot
+            _uiState.value = _uiState.value.copy(error = null, isLoading = true)
+            
+            try {
+                val chatResponse = sendMessage(message, conversationId)
+                // If PHP chatbot succeeds, we're good - no error needed
+                if (chatResponse != null && chatResponse.success) {
+                    _uiState.value = _uiState.value.copy(error = null, isLoading = false)
+                    return Pair(chatResponse, null)
+                } else {
+                    // PHP chatbot also failed
+                    val baseUrl = RetrofitClient.BASE_URL_PUBLIC
+                    val flaskUrl = RetrofitClient.FLASK_BASE_URL_PUBLIC
+                    val errorMsg = if (flaskFailed) {
+                        "Unable to connect to server.\n\nPlease check:\n1. XAMPP Apache is running (port 80)\n2. Flask API is running (port 5000)\n3. Phone and computer on same Wi-Fi\n4. Test PHP: ${baseUrl}test_connection.php\n5. Test Flask: ${flaskUrl}health"
+                    } else {
+                        chatResponse?.response ?: "Unable to connect to server. Please check your connection."
+                    }
+                    _uiState.value = _uiState.value.copy(error = errorMsg, isLoading = false)
+                    return Pair(chatResponse, symptomResponse)
+                }
+            } catch (e: Exception) {
+                // Both Flask and PHP failed - show comprehensive error
+                val baseUrl = RetrofitClient.BASE_URL_PUBLIC
+                val flaskUrl = RetrofitClient.FLASK_BASE_URL_PUBLIC
+                val errorMsg = "Unable to connect to server.\n\nPlease check:\n1. XAMPP Apache is running (port 80)\n2. Flask API is running (port 5000)\n3. Phone and computer on same Wi-Fi\n4. Test PHP: ${baseUrl}test_connection.php\n5. Test Flask: ${flaskUrl}health"
+                _uiState.value = _uiState.value.copy(error = errorMsg, isLoading = false)
+                return Pair(null, symptomResponse)
+            }
         }
     }
 }

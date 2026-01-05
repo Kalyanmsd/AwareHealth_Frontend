@@ -63,7 +63,7 @@ fun ChatWindowScreen(
         mutableStateListOf(
             ChatMessage(
                 id = "1",
-                text = "Hello! I'm your AI Health Assistant. How can I help you today?",
+                text = "Hello! I'm your AI Health Assistant. Please enter the disease name you'd like to know about.",
                 sender = "bot",
                 time = "Now"
             )
@@ -365,207 +365,15 @@ fun ChatWindowScreen(
                             inputText = ""
                             errorMessage = null
                             
-                            // Send to API - Try AI symptom checker first, then fallback to regular chatbot
+                            // Send to chatbot API (single request, render exactly as returned)
                             scope.launch {
-                                // Try AI symptom checker first
-                                val (chatResponse, symptomResponse) = viewModel.sendMessageWithAI(
+                                val chatResponse = viewModel.sendMessage(
                                     message = userInput,
                                     conversationId = uiState.conversationId
                                 )
                                 
-                                if (symptomResponse != null && symptomResponse.success) {
-                                    val conversationState = symptomResponse.conversation_state
-                                    
-                                    // Handle different conversation states separately
-                                    when (conversationState) {
-                                        "waiting_for_disease", "asking_prevention" -> {
-                                            // Initial state: Show symptoms ONLY in structured format (not in message text)
-                                            // Extract just the question part from message
-                                            val messageText = symptomResponse.message?.let { msg ->
-                                                // Find the question part (usually after symptoms list)
-                                                val questionPart = msg.split("\n\n").lastOrNull { 
-                                                    it.contains("Can I provide", ignoreCase = true) ||
-                                                    it.contains("prevention", ignoreCase = true)
-                                                } ?: msg.takeIf { 
-                                                    it.contains("Can I provide", ignoreCase = true)
-                                                }
-                                                questionPart ?: "Can I provide prevention tips?"
-                                            } ?: "Can I provide prevention tips?"
-                                            
-                                            // First message: Symptoms (structured only)
-                                            messages.add(
-                                                ChatMessage(
-                                                    id = (System.currentTimeMillis() + 1).toString(),
-                                                    text = "Here are the common symptoms:",
-                                                    sender = "bot",
-                                                    time = "Now",
-                                                    symptoms = symptomResponse.symptoms, // Show ONLY in structured format
-                                                    preventionTips = null,
-                                                    foodRecommendations = null
-                                                )
-                                            )
-                                            
-                                            // Second message: Question (separate)
-                                            if (conversationState == "asking_prevention") {
-                                                kotlinx.coroutines.delay(300)
-                                                messages.add(
-                                                    ChatMessage(
-                                                        id = (System.currentTimeMillis() + 2).toString(),
-                                                        text = messageText,
-                                                        sender = "bot",
-                                                        time = "Now",
-                                                        symptoms = null,
-                                                        preventionTips = null,
-                                                        foodRecommendations = null
-                                                    )
-                                                )
-                                            }
-                                        }
-                                        
-                                        "asking_food" -> {
-                                            // After prevention tips: Show prevention tips ONLY in structured format
-                                            // Extract just the question part
-                                            val messageText = symptomResponse.message?.let { msg ->
-                                                msg.split("\n\n").lastOrNull { 
-                                                    it.contains("Can I provide", ignoreCase = true) ||
-                                                    it.contains("food", ignoreCase = true)
-                                                } ?: msg.takeIf { 
-                                                    it.contains("Can I provide", ignoreCase = true)
-                                                }
-                                                ?: "Can I provide what type of food you have to take?"
-                                            } ?: "Can I provide what type of food you have to take?"
-                                            
-                                            // First message: Prevention tips (structured only)
-                                            messages.add(
-                                                ChatMessage(
-                                                    id = (System.currentTimeMillis() + 1).toString(),
-                                                    text = "Here are the prevention tips:",
-                                                    sender = "bot",
-                                                    time = "Now",
-                                                    symptoms = null,
-                                                    preventionTips = symptomResponse.prevention_tips, // Show ONLY in structured format
-                                                    foodRecommendations = null
-                                                )
-                                            )
-                                            
-                                            // Second message: Food question (separate)
-                                            kotlinx.coroutines.delay(300)
-                                            messages.add(
-                                                ChatMessage(
-                                                    id = (System.currentTimeMillis() + 2).toString(),
-                                                    text = messageText,
-                                                    sender = "bot",
-                                                    time = "Now",
-                                                    symptoms = null,
-                                                    preventionTips = null,
-                                                    foodRecommendations = null
-                                                )
-                                            )
-                                        }
-                                        
-                                        "asking_days" -> {
-                                            // After food recommendations: Show food in separate message, then ask days
-                                            // First message: Food recommendations
-                                            if (symptomResponse.food_recommendations?.isNotEmpty() == true) {
-                                                messages.add(
-                                                    ChatMessage(
-                                                        id = (System.currentTimeMillis() + 1).toString(),
-                                                        text = "Here are the food recommendations:",
-                                                        sender = "bot",
-                                                        time = "Now",
-                                                        symptoms = null,
-                                                        preventionTips = null,
-                                                        foodRecommendations = symptomResponse.food_recommendations
-                                                    )
-                                                )
-                                                
-                                                // Second message: Days question (separate)
-                                                kotlinx.coroutines.delay(300)
-                                                messages.add(
-                                                    ChatMessage(
-                                                        id = (System.currentTimeMillis() + 2).toString(),
-                                                        text = symptomResponse.message?.takeIf { 
-                                                            it.contains("days", ignoreCase = true) ||
-                                                            it.contains("suffering", ignoreCase = true)
-                                                        } ?: "From how many days are you suffering from this disease?",
-                                                        sender = "bot",
-                                                        time = "Now",
-                                                        symptoms = null,
-                                                        preventionTips = null,
-                                                        foodRecommendations = null
-                                                    )
-                                                )
-                                            } else {
-                                                // If no food recommendations, just ask days
-                                                messages.add(
-                                                    ChatMessage(
-                                                        id = (System.currentTimeMillis() + 1).toString(),
-                                                        text = symptomResponse.message?.takeIf { 
-                                                            it.contains("days", ignoreCase = true) ||
-                                                            it.contains("suffering", ignoreCase = true)
-                                                        } ?: "From how many days are you suffering from this disease?",
-                                                        sender = "bot",
-                                                        time = "Now",
-                                                        symptoms = null,
-                                                        preventionTips = null,
-                                                        foodRecommendations = null
-                                                    )
-                                                )
-                                            }
-                                        }
-                                        
-                                        "completed" -> {
-                                            // After days provided: Show response based on days
-                                            val days = symptomResponse.days_suffering
-                                            
-                                            if (days != null && days >= 3) {
-                                                // 3+ days: Show message and navigate
-                                                messages.add(
-                                                    ChatMessage(
-                                                        id = (System.currentTimeMillis() + 1).toString(),
-                                                        text = symptomResponse.message ?: "Since you've been suffering for more than 3 days, I recommend booking an appointment with a doctor.",
-                                                        sender = "bot",
-                                                        time = "Now",
-                                                        symptoms = null,
-                                                        preventionTips = null,
-                                                        foodRecommendations = null
-                                                    )
-                                                )
-                                                kotlinx.coroutines.delay(1000)
-                                                onNavigateToSelectDoctor()
-                                            } else {
-                                                // 1-2 days: Show care message
-                                                messages.add(
-                                                    ChatMessage(
-                                                        id = (System.currentTimeMillis() + 1).toString(),
-                                                        text = "Please take care of your health. Rest well, stay hydrated, and avoid being alone - reach out to family or friends for support. If symptoms worsen, please consult a doctor.",
-                                                        sender = "bot",
-                                                        time = "Now",
-                                                        symptoms = null,
-                                                        preventionTips = null,
-                                                        foodRecommendations = null
-                                                    )
-                                                )
-                                            }
-                                        }
-                                        
-                                        else -> {
-                                            // Fallback: Show message with structured data if available
-                                            messages.add(
-                                                ChatMessage(
-                                                    id = (System.currentTimeMillis() + 1).toString(),
-                                                    text = symptomResponse.message ?: "I've analyzed your symptoms.",
-                                                    sender = "bot",
-                                                    time = "Now",
-                                                    symptoms = symptomResponse.symptoms,
-                                                    preventionTips = symptomResponse.prevention_tips,
-                                                    foodRecommendations = symptomResponse.food_recommendations
-                                                )
-                                            )
-                                        }
-                                    }
-                                } else if (chatResponse != null && chatResponse.success) {
-                                    // Regular chatbot responded
+                                if (chatResponse != null && chatResponse.success) {
+                                    // Render exactly what backend returns (single bubble)
                                     messages.add(
                                         ChatMessage(
                                             id = (System.currentTimeMillis() + 1).toString(),
@@ -575,14 +383,10 @@ fun ChatWindowScreen(
                                         )
                                     )
                                 } else {
-                                    // Show error message
-                                    val errorMsg = if (uiState.error != null) {
-                                        uiState.error!!
-                                    } else if (chatResponse != null && !chatResponse.success) {
-                                        chatResponse.response
-                                    } else {
-                                        "Unable to connect to server. Please check:\n1. Your internet connection\n2. Server is running\n3. Try again in a moment"
-                                    }
+                                            val baseUrl = com.example.awarehealth.data.RetrofitClient.BASE_URL_PUBLIC
+                                    val errorMsg = uiState.error
+                                        ?: chatResponse?.response
+                                        ?: "Unable to connect to server.\n\nPlease check:\n1. XAMPP Apache is running (port 80)\n2. Flask API is running (port 5000)\n3. Phone and computer on same Wi-Fi\n4. Test PHP: ${baseUrl}test_connection.php"
                                     
                                     messages.add(
                                         ChatMessage(

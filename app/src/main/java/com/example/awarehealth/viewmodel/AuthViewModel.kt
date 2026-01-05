@@ -9,6 +9,7 @@ import com.example.awarehealth.data.AuthResponse
 import com.example.awarehealth.data.ForgotPasswordRequest
 import com.example.awarehealth.data.VerifyOTPRequest
 import com.example.awarehealth.data.ResetPasswordRequest
+import com.example.awarehealth.data.RetrofitClient
 import com.google.gson.Gson
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -102,17 +103,25 @@ class AuthViewModel(private val repository: AppRepository) : ViewModel() {
                     onError(errorMessage)
                 }
             } catch (e: Exception) {
+                // Extract IP from BASE_URL for error messages
+                val baseUrl = RetrofitClient.BASE_URL_PUBLIC
+                val testUrl = baseUrl.replace("/api/", "/api/test_connection.php")
+                
                 val errorMsg = when {
                     e.message?.contains("Failed to connect", ignoreCase = true) == true ||
                     e.message?.contains("Connection refused", ignoreCase = true) == true ||
                     e.message?.contains("Connection timed out", ignoreCase = true) == true ||
-                    e.message?.contains("timeout", ignoreCase = true) == true ->
-                        "Cannot connect to server.\n\nPlease check:\n1. XAMPP Apache is running\n2. Phone and computer on same Wi-Fi\n3. Firewall allows port 80\n4. Test: http://172.20.10.2/AwareHealth/api/test_connection.php in phone browser"
-                    e.message?.contains("Unable to resolve host", ignoreCase = true) == true ->
-                        "Cannot find server.\n\nCheck:\n1. IP address: 172.20.10.2\n2. Phone and computer on same Wi-Fi network\n3. XAMPP Apache is running"
+                    e.message?.contains("timeout", ignoreCase = true) == true ||
+                    e.message?.contains("Unable to connect", ignoreCase = true) == true ||
+                    e is java.net.ConnectException ||
+                    e is java.net.SocketTimeoutException ->
+                        "Cannot connect to server.\n\nPlease check:\n1. XAMPP Apache is running\n2. Phone and computer on same Wi-Fi\n3. Firewall allows port 80\n4. Test: $testUrl in phone browser"
+                    e.message?.contains("Unable to resolve host", ignoreCase = true) == true ||
+                    e.message?.contains("No address associated with hostname", ignoreCase = true) == true ->
+                        "Cannot find server.\n\nCheck:\n1. IP address in BASE_URL: $baseUrl\n2. Phone and computer on same Wi-Fi network\n3. XAMPP Apache is running"
                     else -> {
                         val baseMsg = e.message ?: "Unable to connect to server"
-                        "Connection error.\n\n$baseMsg\n\nTroubleshooting:\n1. Check XAMPP Apache is running (green)\n2. Same Wi-Fi network\n3. Test server in browser first"
+                        "Connection error.\n\n$baseMsg\n\nTroubleshooting:\n1. Check XAMPP Apache is running (green)\n2. Same Wi-Fi network\n3. Test server in browser: $testUrl"
                     }
                 }
                 _uiState.value = _uiState.value.copy(
@@ -212,17 +221,25 @@ class AuthViewModel(private val repository: AppRepository) : ViewModel() {
                     onError(errorMessage)
                 }
             } catch (e: Exception) {
+                // Extract IP from BASE_URL for error messages
+                val baseUrl = RetrofitClient.BASE_URL_PUBLIC
+                val testUrl = baseUrl.replace("/api/", "/api/test_connection.php")
+                
                 val errorMsg = when {
                     e.message?.contains("Failed to connect", ignoreCase = true) == true ||
                     e.message?.contains("Connection refused", ignoreCase = true) == true ||
                     e.message?.contains("Connection timed out", ignoreCase = true) == true ||
-                    e.message?.contains("timeout", ignoreCase = true) == true ->
-                        "Cannot connect to server.\n\nPlease check:\n1. XAMPP Apache is running\n2. Phone and computer on same Wi-Fi\n3. Firewall allows port 80"
-                    e.message?.contains("Unable to resolve host", ignoreCase = true) == true ->
-                        "Cannot find server.\n\nCheck:\n1. IP address: 172.20.10.2\n2. Phone and computer on same Wi-Fi network\n3. XAMPP Apache is running"
+                    e.message?.contains("timeout", ignoreCase = true) == true ||
+                    e.message?.contains("Unable to connect", ignoreCase = true) == true ||
+                    e is java.net.ConnectException ||
+                    e is java.net.SocketTimeoutException ->
+                        "Cannot connect to server.\n\nPlease check:\n1. XAMPP Apache is running\n2. Phone and computer on same Wi-Fi\n3. Firewall allows port 80\n4. Test: $testUrl in phone browser"
+                    e.message?.contains("Unable to resolve host", ignoreCase = true) == true ||
+                    e.message?.contains("No address associated with hostname", ignoreCase = true) == true ->
+                        "Cannot find server.\n\nCheck:\n1. IP address in BASE_URL: $baseUrl\n2. Phone and computer on same Wi-Fi network\n3. XAMPP Apache is running"
                     else -> {
                         val baseMsg = e.message ?: "Unable to connect to server"
-                        "Connection error.\n\n$baseMsg\n\nTroubleshooting:\n1. Check XAMPP Apache is running\n2. Same Wi-Fi network"
+                        "Connection error.\n\n$baseMsg\n\nTroubleshooting:\n1. Check XAMPP Apache is running\n2. Same Wi-Fi network\n3. Test: $testUrl"
                     }
                 }
                 _uiState.value = _uiState.value.copy(
@@ -273,16 +290,22 @@ class AuthViewModel(private val repository: AppRepository) : ViewModel() {
                     onError(errorMsg)
                 }
             } catch (e: Exception) {
+                // Extract IP from BASE_URL for error messages
+                val baseUrl = RetrofitClient.BASE_URL_PUBLIC
+                val testUrl = baseUrl.replace("/api/", "/api/test_connection.php")
+                
                 val errorMsg = when {
-                    e.message?.contains("Failed to connect") == true || 
-                    e.message?.contains("Connection refused") == true -> 
-                        "Cannot connect to server.\n\nCheck:\n1. XAMPP Apache is running\n2. Same Wi-Fi network\n3. Test: http://172.20.10.2/AwareHealth/api/test_connection.php"
-                    e.message?.contains("timeout") == true || 
+                    e.message?.contains("Failed to connect", ignoreCase = true) == true || 
+                    e.message?.contains("Connection refused", ignoreCase = true) == true ||
+                    e is java.net.ConnectException -> 
+                        "Cannot connect to server.\n\nCheck:\n1. XAMPP Apache is running\n2. Same Wi-Fi network\n3. Test: $testUrl"
+                    e.message?.contains("timeout", ignoreCase = true) == true || 
                     e is java.net.SocketTimeoutException -> 
-                        "Connection timeout.\n\nCheck:\n1. XAMPP Apache is running (GREEN)\n2. Firewall allows Apache\n3. Test in browser first"
-                    e.message?.contains("Unable to resolve host") == true -> 
-                        "Cannot find server.\n\nCheck IP: 172.20.10.2\nPhone and computer on same Wi-Fi?"
-                    else -> "Network error: ${e.message ?: "Unable to connect"}\n\nCheck XAMPP Apache is running"
+                        "Connection timeout.\n\nCheck:\n1. XAMPP Apache is running (GREEN)\n2. Firewall allows Apache\n3. Test in browser: $testUrl"
+                    e.message?.contains("Unable to resolve host", ignoreCase = true) == true ||
+                    e.message?.contains("No address associated with hostname", ignoreCase = true) == true -> 
+                        "Cannot find server.\n\nCheck:\n1. IP address: $baseUrl\n2. Phone and computer on same Wi-Fi?"
+                    else -> "Network error: ${e.message ?: "Unable to connect"}\n\nCheck XAMPP Apache is running\nTest: $testUrl"
                 }
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,

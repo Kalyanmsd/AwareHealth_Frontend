@@ -141,17 +141,63 @@ if (!$tableCheck || $tableCheck->num_rows === 0) {
     exit();
 }
 
-// Verify doctor exists (check status if column exists)
+// Verify doctor exists using JOIN with users table to get doctor name
 $checkStatusColumn = $conn->query("SHOW COLUMNS FROM doctors LIKE 'status'");
 $hasStatusColumn = $checkStatusColumn && $checkStatusColumn->num_rows > 0;
 
-if ($hasStatusColumn) {
-    // Check if doctor exists and is available
-    $doctorStmt = $conn->prepare("SELECT id, name, specialization, hospital FROM doctors WHERE id = ? AND status = 'Available'");
-} else {
-    // No status column, just check if doctor exists
-    $doctorStmt = $conn->prepare("SELECT id, name, specialization, hospital FROM doctors WHERE id = ?");
+// Check if doctors table has user_id
+$checkUserIdColumn = $conn->query("SHOW COLUMNS FROM doctors LIKE 'user_id'");
+$hasUserIdColumn = $checkUserIdColumn && $checkUserIdColumn->num_rows > 0;
+
+// Check doctors table columns for specialty/specialization
+$doctorsColumns = $conn->query("SHOW COLUMNS FROM doctors");
+$hasSpecialty = false;
+$hasSpecialization = false;
+$hasLocation = false;
+$hasHospital = false;
+
+while ($col = $doctorsColumns->fetch_assoc()) {
+    if ($col['Field'] === 'specialty') $hasSpecialty = true;
+    if ($col['Field'] === 'specialization') $hasSpecialization = true;
+    if ($col['Field'] === 'location') $hasLocation = true;
+    if ($col['Field'] === 'hospital') $hasHospital = true;
 }
+
+// Build doctor query with JOIN to get name from users table
+if ($hasUserIdColumn) {
+    // Use JOIN to get name from users table
+    if ($hasStatusColumn) {
+        $doctorStmt = $conn->prepare("
+            SELECT 
+                d.id,
+                COALESCE(u.name, d.name, 'Dr. Doctor') as name,
+                COALESCE(d.specialization, d.specialty, 'General Physician') as specialization,
+                COALESCE(d.location, d.hospital, 'Saveetha Hospital') as hospital
+            FROM doctors d
+            LEFT JOIN users u ON d.user_id = u.id
+            WHERE d.id = ? AND d.status = 'Available'
+        ");
+    } else {
+        $doctorStmt = $conn->prepare("
+            SELECT 
+                d.id,
+                COALESCE(u.name, d.name, 'Dr. Doctor') as name,
+                COALESCE(d.specialization, d.specialty, 'General Physician') as specialization,
+                COALESCE(d.location, d.hospital, 'Saveetha Hospital') as hospital
+            FROM doctors d
+            LEFT JOIN users u ON d.user_id = u.id
+            WHERE d.id = ?
+        ");
+    }
+} else {
+    // Fallback: doctors table doesn't have user_id
+    if ($hasStatusColumn) {
+        $doctorStmt = $conn->prepare("SELECT id, name, COALESCE(specialization, specialty, 'General Physician') as specialization, COALESCE(location, hospital, 'Saveetha Hospital') as hospital FROM doctors WHERE id = ? AND status = 'Available'");
+    } else {
+        $doctorStmt = $conn->prepare("SELECT id, name, COALESCE(specialization, specialty, 'General Physician') as specialization, COALESCE(location, hospital, 'Saveetha Hospital') as hospital FROM doctors WHERE id = ?");
+    }
+}
+
 if (!$doctorStmt) {
     $conn->close();
     http_response_code(500);
@@ -216,8 +262,44 @@ $insertStmt->bind_param("siss", $userEmail, $doctorId, $appointmentDate, $appoin
 if ($insertStmt->execute()) {
     $appointmentId = $conn->insert_id;
     
-    // Verify the insert
-    $verifyStmt = $conn->prepare("SELECT id, user_email, doctor_id, appointment_date, appointment_time, status, created_at FROM appointments WHERE id = ?");
+    // Verify the insert and fetch with JOIN to get doctor name from users table
+    if ($hasUserIdColumn) {
+        $verifyStmt = $conn->prepare("
+            SELECT 
+                a.id,
+                a.user_email,
+                a.doctor_id,
+                a.appointment_date,
+                a.appointment_time,
+                a.status,
+                a.created_at,
+                COALESCE(u.name, d.name, 'Dr. Doctor') as doctor_name,
+                COALESCE(d.specialization, d.specialty, 'General Physician') as doctor_specialization,
+                COALESCE(d.location, d.hospital, 'Saveetha Hospital') as location
+            FROM appointments a
+            LEFT JOIN doctors d ON a.doctor_id = d.id
+            LEFT JOIN users u ON d.user_id = u.id
+            WHERE a.id = ?
+        ");
+    } else {
+        $verifyStmt = $conn->prepare("
+            SELECT 
+                a.id,
+                a.user_email,
+                a.doctor_id,
+                a.appointment_date,
+                a.appointment_time,
+                a.status,
+                a.created_at,
+                COALESCE(d.name, 'Dr. Doctor') as doctor_name,
+                COALESCE(d.specialization, d.specialty, 'General Physician') as doctor_specialization,
+                COALESCE(d.location, d.hospital, 'Saveetha Hospital') as location
+            FROM appointments a
+            LEFT JOIN doctors d ON a.doctor_id = d.id
+            WHERE a.id = ?
+        ");
+    }
+    
     $verifyStmt->bind_param("i", $appointmentId);
     $verifyStmt->execute();
     $verifyResult = $verifyStmt->get_result();
@@ -226,10 +308,13 @@ if ($insertStmt->execute()) {
     if ($verifyResult->num_rows > 0) {
         $appointment = $verifyResult->fetch_assoc();
         
-        error_log("✅ Appointment booked successfully - ID: $appointmentId, Email: $userEmail, Doctor: " . $doctor['name']);
+        error_log("✅ Appointment booked successfully - ID: $appointmentId, Email: $userEmail, Doctor: " . $appointment['doctor_name']);
         
         $insertStmt->close();
         $conn->close();
+        
+        // Format time to 12-hour format for display
+        $time12Hour = date("g:i A", strtotime($appointment['appointment_time']));
         
         http_response_code(201);
         echo json_encode([
@@ -239,10 +324,12 @@ if ($insertStmt->execute()) {
                 'id' => (int)$appointment['id'],
                 'user_email' => $appointment['user_email'],
                 'doctor_id' => (int)$appointment['doctor_id'],
-                'doctor_name' => $doctor['name'],
-                'doctor_specialization' => $doctor['specialization'],
+                'doctor_name' => $appointment['doctor_name'],
+                'doctor_specialization' => $appointment['doctor_specialization'],
+                'location' => $appointment['location'],
                 'appointment_date' => $appointment['appointment_date'],
                 'appointment_time' => $appointment['appointment_time'],
+                'appointment_time_display' => $time12Hour,
                 'status' => $appointment['status'],
                 'created_at' => $appointment['created_at']
             ]

@@ -76,11 +76,11 @@ fun SelectDoctorScreen(
         Doctor(
             id = doctorData.id,
             name = doctorData.name,
-            specialty = doctorData.specialty,
-            experience = doctorData.experience,
-            rating = doctorData.rating,
-            availability = doctorData.availability,
-            location = doctorData.location,
+            specialty = doctorData.specialty ?: "General",
+            experience = doctorData.experience ?: "Not specified",
+            rating = doctorData.rating ?: 0.0,
+            availability = doctorData.availability ?: "Not available",
+            location = doctorData.location ?: "Not specified",
             // Alternate colors for visual variety
             color = if (index % 2 == 0) Color(0xFFFFEAD6) else Color(0xFFE9FFF4)
         )

@@ -25,7 +25,15 @@ sealed class Screen(val route: String) {
     object SelectDateTime : Screen("select_date_time")
     object AppointmentSummary : Screen("appointment_summary")
     object AppointmentSuccess : Screen("appointment_success")
-    object AppointmentAccepted : Screen("appointment_accepted")
+    object AppointmentAccepted : Screen("appointment_accepted/{doctorName}/{doctorSpecialty}/{appointmentDate}/{appointmentTime}/{location}") {
+        fun createRoute(
+            doctorName: String = "",
+            doctorSpecialty: String = "",
+            appointmentDate: String = "",
+            appointmentTime: String = "",
+            location: String = ""
+        ) = "appointment_accepted/${java.net.URLEncoder.encode(doctorName, "UTF-8")}/${java.net.URLEncoder.encode(doctorSpecialty, "UTF-8")}/${java.net.URLEncoder.encode(appointmentDate, "UTF-8")}/${java.net.URLEncoder.encode(appointmentTime, "UTF-8")}/${java.net.URLEncoder.encode(location, "UTF-8")}"
+    }
     object AppointmentRejected : Screen("appointment_rejected")
     object MyAppointments : Screen("my_appointments")
     
