@@ -10,7 +10,7 @@ object RetrofitClient {
     // IMPORTANT: Update this URL based on your testing environment
     // 
     // For Android Emulator (AVD):
-    //   Use: "http://172.20.10.2/AwareHealth/api/"
+    //   Use: "http://10.0.2.2/AwareHealth/api/"
     //   (10.0.2.2 is a special IP that maps to localhost on your computer)
     //
     // For Physical Android Device:
@@ -22,7 +22,7 @@ object RetrofitClient {
     // Make sure your device/emulator is on the same Wi-Fi network as your computer
     
     // For Android Emulator (AVD):
-    // private const val BASE_URL = "http://172.20.10.2/AwareHealth/api/" // For Emulator
+    // private const val BASE_URL = "http://10.0.2.2/AwareHealth/api/" // For Emulator
     // For Physical Android Device:
     // Update this IP to match your computer's current IP address
     // Find your IP: Run "ipconfig" in Command Prompt and look for "IPv4 Address"
@@ -31,11 +31,8 @@ object RetrofitClient {
     
     // Flask AI API Base URL (Python Flask server on port 5000)
     // For Physical Android Device:
-    //   Use your computer's IP address and port 5000
-    //   Example (current network IP): http://172.20.10.2:5000/
     private const val FLASK_BASE_URL = "http://172.20.10.2:5000/" // Flask AI API - Current IP
     // For Android Emulator (AVD):
-    //   Use: "http://10.0.2.2:5000/"
     // private const val FLASK_BASE_URL = "http://10.0.2.2:5000/" // Flask AI API for Emulator
     
     // Expose BASE_URL for error messages
@@ -75,5 +72,3 @@ object RetrofitClient {
     // Flask AI API Service
     val flaskApiService: FlaskApiService = flaskRetrofit.create(FlaskApiService::class.java)
 }
-
-

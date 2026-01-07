@@ -35,6 +35,9 @@ interface ApiService {
     @POST("auth.php/google-signin")
     suspend fun googleSignIn(@Body request: GoogleSignInRequest): Response<AuthResponse>
     
+    @POST("auth.php/update-profile")
+    suspend fun updateProfile(@Body request: UpdateProfileRequest): Response<AuthResponse>
+    
     // ========== OTP Login Endpoints ==========
     
     @POST("send_otp.php")
@@ -68,20 +71,13 @@ interface ApiService {
     @GET("get_my_appointments.php")
     suspend fun getMyAppointments(@Query("email") email: String): Response<AppointmentsResponse>
     
+    @GET("get_doctor_appointments.php")
+    suspend fun getDoctorAppointments(@Query("doctor_id") doctorId: String): Response<AppointmentsResponse>
+    
     // ========== Chat Endpoint ==========
     
     @POST("chatbot.php")
     suspend fun sendChatMessage(@Body request: ChatMessageRequest): Response<ChatMessageResponse>
-    
-    // ========== AI Chatbot Endpoint (PHP Proxy to Flask) ==========
-    
-    /**
-     * AI Chatbot endpoint - PHP proxy to Flask
-     * Android calls PHP, PHP forwards to Flask, PHP returns response
-     * This prevents direct Flask connection issues
-     */
-    @POST("chat.php")
-    suspend fun sendAIChatMessage(@Body request: SymptomRequest): Response<SymptomResponse>
     
     // ========== Disease Endpoints ==========
     
@@ -138,6 +134,13 @@ data class GoogleSignInRequest(
     val photoUrl: String? = null
 )
 
+data class UpdateProfileRequest(
+    val userId: String,
+    val name: String,
+    val email: String,
+    val phone: String
+)
+
 data class SendOTPRequest(
     val email: String
 )
@@ -185,7 +188,8 @@ data class UserData(
     val email: String,
     val userType: String,
     val phone: String? = null,
-    val photoUrl: String? = null
+    val photoUrl: String? = null,
+    val doctorId: String? = null  // For doctors - stores their doctor_id from doctors table
 )
 
 data class ApiResponse(

@@ -262,14 +262,39 @@ fun AwareHealthNavGraph(
                 Header(showBack = true, onBackClick = { navController.popBackStack() })
                 PatientProfileScreen(
                     patient = Patient(
-                        name = user.value.name,
-                        email = "john@example.com",
-                        phone = "+1234567890"
+                        name = userData.value?.name ?: user.value.name,
+                        email = userData.value?.email ?: "john@example.com",
+                        phone = userData.value?.phone ?: "+1234567890"
                     ),
                     totalAppointments = patientAppointments.size,
                     completedAppointments = patientAppointments.count { it.status == "accepted" },
-                    onEditProfile = { navController.popBackStack() }
+                    onEditProfile = { 
+                        navController.navigate(Screen.EditPatientProfile.route)
+                    }
                 )
+            }
+        }
+        
+        composable(Screen.EditPatientProfile.route) {
+            userData.value?.let { currentUserData ->
+                EditPatientProfileScreen(
+                    repository = repository,
+                    userData = currentUserData,
+                    onProfileUpdated = { updatedUser ->
+                        // Update user data state
+                        userData.value = updatedUser
+                        user.value = User(
+                            id = updatedUser.id,
+                            name = updatedUser.name
+                        )
+                        // Navigate back to profile
+                        navController.popBackStack()
+                    },
+                    onBack = { navController.popBackStack() }
+                )
+            } ?: run {
+                // If no user data, go back
+                navController.popBackStack()
             }
         }
 
@@ -559,12 +584,56 @@ fun AwareHealthNavGraph(
             Log.d("NavGraph", "Location: '$location' (isEmpty: ${location.isEmpty()})")
             Log.d("NavGraph", "Latest Appointment Data: $latestAppointmentData")
             
+            // Clean values - remove placeholder-like strings
+            fun cleanValue(value: String): String {
+                if (value.isEmpty()) return ""
+                // Remove placeholder-like patterns
+                if (value.startsWith("{") && value.endsWith("}")) return ""
+                if (value.contains("{") || value.contains("}")) return ""
+                return value.trim()
+            }
+            
+            val cleanDoctorName = cleanValue(doctorName)
+            val cleanDoctorSpecialty = cleanValue(doctorSpecialty)
+            val cleanAppointmentDate = cleanValue(appointmentDate)
+            val cleanAppointmentTime = cleanValue(appointmentTime)
+            val cleanLocation = cleanValue(location)
+            
             // Use route parameters if available, otherwise fall back to stored state
-            val finalDoctorName = if (doctorName.isNotEmpty()) doctorName else (latestAppointmentData?.doctorName ?: "")
-            val finalDoctorSpecialty = if (doctorSpecialty.isNotEmpty()) doctorSpecialty else (latestAppointmentData?.doctorSpecialty ?: "")
-            val finalAppointmentDate = if (appointmentDate.isNotEmpty()) appointmentDate else (latestAppointmentData?.appointmentDate ?: "")
-            val finalAppointmentTime = if (appointmentTime.isNotEmpty()) appointmentTime else (latestAppointmentData?.appointmentTime ?: "")
-            val finalLocation = if (location.isNotEmpty()) location else (latestAppointmentData?.location ?: "")
+            val finalDoctorName = when {
+                cleanDoctorName.isNotEmpty() -> cleanDoctorName
+                latestAppointmentData?.doctorName?.isNotEmpty() == true -> latestAppointmentData!!.doctorName
+                selectedDoctor?.name?.isNotEmpty() == true -> selectedDoctor!!.name
+                else -> ""
+            }
+            
+            val finalDoctorSpecialty = when {
+                cleanDoctorSpecialty.isNotEmpty() -> cleanDoctorSpecialty
+                latestAppointmentData?.doctorSpecialty?.isNotEmpty() == true -> latestAppointmentData!!.doctorSpecialty
+                selectedDoctor?.specialty?.isNotEmpty() == true -> selectedDoctor!!.specialty
+                else -> ""
+            }
+            
+            val finalAppointmentDate = when {
+                cleanAppointmentDate.isNotEmpty() -> cleanAppointmentDate
+                latestAppointmentData?.appointmentDate?.isNotEmpty() == true -> latestAppointmentData!!.appointmentDate
+                selectedDateTime?.date?.isNotEmpty() == true -> selectedDateTime!!.date
+                else -> ""
+            }
+            
+            val finalAppointmentTime = when {
+                cleanAppointmentTime.isNotEmpty() -> cleanAppointmentTime
+                latestAppointmentData?.appointmentTime?.isNotEmpty() == true -> latestAppointmentData!!.appointmentTime
+                selectedDateTime?.time?.isNotEmpty() == true -> selectedDateTime!!.time
+                else -> ""
+            }
+            
+            val finalLocation = when {
+                cleanLocation.isNotEmpty() -> cleanLocation
+                latestAppointmentData?.location?.isNotEmpty() == true -> latestAppointmentData!!.location
+                selectedDoctor?.location?.isNotEmpty() == true -> selectedDoctor!!.location
+                else -> ""
+            }
             
             Log.d("NavGraph", "=== Final Values to Display ===")
             Log.d("NavGraph", "Final Doctor Name: '$finalDoctorName'")
@@ -886,7 +955,7 @@ fun AwareHealthNavGraph(
         }
 
         composable(Screen.PendingRequests.route) {
-            PendingRequests(navController = navController)
+            PendingRequests(navController = navController, repository = repository)
         }
 
         composable(Screen.AcceptedRequests.route) {

@@ -245,8 +245,76 @@ if ($checkResult->num_rows > 0) {
 }
 $checkStmt->close();
 
-// Insert appointment
-$insertStmt = $conn->prepare("INSERT INTO appointments (user_email, doctor_id, appointment_date, appointment_time, status) VALUES (?, ?, ?, ?, 'Pending')");
+// Get doctor name from doctors table
+$getDoctorStmt = $conn->prepare("SELECT COALESCE(doctor_name, name, 'Dr. Doctor') as doctor_name, COALESCE(location, hospital, 'Saveetha Hospital') as hospital FROM doctors WHERE id = ?");
+$getDoctorStmt->bind_param("i", $doctorId);
+$getDoctorStmt->execute();
+$doctorResult = $getDoctorStmt->get_result();
+$doctorData = $doctorResult->fetch_assoc();
+$doctorName = $doctorData['doctor_name'] ?? 'Dr. Doctor';
+$hospital = $doctorData['hospital'] ?? 'Saveetha Hospital';
+$getDoctorStmt->close();
+
+// Get patient name from users table if available
+$patientName = null;
+$getPatientStmt = $conn->prepare("SELECT name FROM users WHERE email = ?");
+$getPatientStmt->bind_param("s", $userEmail);
+if ($getPatientStmt->execute()) {
+    $patientResult = $getPatientStmt->get_result();
+    if ($patientResult->num_rows > 0) {
+        $patientData = $patientResult->fetch_assoc();
+        $patientName = $patientData['name'];
+    }
+}
+$getPatientStmt->close();
+
+// Check which columns exist in appointments table
+$columnCheck = $conn->query("SHOW COLUMNS FROM appointments");
+$columns = [];
+while ($col = $columnCheck->fetch_assoc()) {
+    $columns[] = $col['Field'];
+}
+
+$hasPatientName = in_array('patient_name', $columns);
+$hasDoctorName = in_array('doctor_name', $columns);
+$hasHospital = in_array('hospital', $columns);
+$hasPatientEmail = in_array('patient_email', $columns);
+$hasAppointmentDate = in_array('appointment_date', $columns);
+$hasAppointmentTime = in_array('appointment_time', $columns);
+
+// Build INSERT query based on available columns
+$insertFields = ['user_email', 'doctor_id', 'appointment_date', 'appointment_time', 'status'];
+$insertValues = [$userEmail, $doctorId, $appointmentDate, $appointmentTime, 'pending'];
+$insertTypes = "siss";
+
+if ($hasPatientName && $patientName) {
+    $insertFields[] = 'patient_name';
+    $insertValues[] = $patientName;
+    $insertTypes .= "s";
+}
+
+if ($hasDoctorName) {
+    $insertFields[] = 'doctor_name';
+    $insertValues[] = $doctorName;
+    $insertTypes .= "s";
+}
+
+if ($hasHospital) {
+    $insertFields[] = 'hospital';
+    $insertValues[] = $hospital;
+    $insertTypes .= "s";
+}
+
+if ($hasPatientEmail) {
+    $insertFields[] = 'patient_email';
+    $insertValues[] = $userEmail;
+    $insertTypes .= "s";
+}
+
+$fieldsStr = implode(', ', $insertFields);
+$placeholders = implode(', ', array_fill(0, count($insertValues), '?'));
+
+$insertStmt = $conn->prepare("INSERT INTO appointments ($fieldsStr) VALUES ($placeholders)");
 if (!$insertStmt) {
     $conn->close();
     http_response_code(500);
@@ -257,48 +325,35 @@ if (!$insertStmt) {
     exit();
 }
 
-$insertStmt->bind_param("siss", $userEmail, $doctorId, $appointmentDate, $appointmentTime);
+$insertStmt->bind_param($insertTypes, ...$insertValues);
 
 if ($insertStmt->execute()) {
     $appointmentId = $conn->insert_id;
     
-    // Verify the insert and fetch with JOIN to get doctor name from users table
-    if ($hasUserIdColumn) {
-        $verifyStmt = $conn->prepare("
-            SELECT 
-                a.id,
-                a.user_email,
-                a.doctor_id,
-                a.appointment_date,
-                a.appointment_time,
-                a.status,
-                a.created_at,
-                COALESCE(u.name, d.name, 'Dr. Doctor') as doctor_name,
-                COALESCE(d.specialization, d.specialty, 'General Physician') as doctor_specialization,
-                COALESCE(d.location, d.hospital, 'Saveetha Hospital') as location
-            FROM appointments a
-            LEFT JOIN doctors d ON a.doctor_id = d.id
-            LEFT JOIN users u ON d.user_id = u.id
-            WHERE a.id = ?
-        ");
-    } else {
-        $verifyStmt = $conn->prepare("
-            SELECT 
-                a.id,
-                a.user_email,
-                a.doctor_id,
-                a.appointment_date,
-                a.appointment_time,
-                a.status,
-                a.created_at,
-                COALESCE(d.name, 'Dr. Doctor') as doctor_name,
-                COALESCE(d.specialization, d.specialty, 'General Physician') as doctor_specialization,
-                COALESCE(d.location, d.hospital, 'Saveetha Hospital') as location
-            FROM appointments a
-            LEFT JOIN doctors d ON a.doctor_id = d.id
-            WHERE a.id = ?
-        ");
-    }
+    // Verify the insert and fetch appointment data
+    $dateCol = $hasAppointmentDate ? 'appointment_date' : 'date';
+    $timeCol = $hasAppointmentTime ? 'appointment_time' : 'time';
+    
+    $verifyStmt = $conn->prepare("
+        SELECT 
+            a.id,
+            a.appointment_id,
+            " . ($hasPatientName ? "COALESCE(a.patient_name, u.name, 'Patient')" : "COALESCE(u.name, 'Patient')") . " as patient_name,
+            " . ($hasPatientEmail ? "COALESCE(a.patient_email, a.user_email)" : "a.user_email") . " as patient_email,
+            a.user_email,
+            a.doctor_id,
+            " . ($hasDoctorName ? "COALESCE(a.doctor_name, d.doctor_name, d.name, 'Dr. Doctor')" : "COALESCE(d.doctor_name, d.name, 'Dr. Doctor')") . " as doctor_name,
+            COALESCE(d.specialization, d.specialty, 'General Physician') as doctor_specialization,
+            " . ($hasHospital ? "COALESCE(a.hospital, d.location, d.hospital, 'Saveetha Hospital')" : "COALESCE(d.location, d.hospital, 'Saveetha Hospital')") . " as location,
+            a.$dateCol as appointment_date,
+            a.$timeCol as appointment_time,
+            a.status,
+            a.created_at
+        FROM appointments a
+        LEFT JOIN doctors d ON a.doctor_id = d.id
+        LEFT JOIN users u ON " . ($hasPatientEmail ? "a.patient_email = u.email" : "a.user_email = u.email") . "
+        WHERE a.id = ?
+    ");
     
     $verifyStmt->bind_param("i", $appointmentId);
     $verifyStmt->execute();
@@ -308,7 +363,7 @@ if ($insertStmt->execute()) {
     if ($verifyResult->num_rows > 0) {
         $appointment = $verifyResult->fetch_assoc();
         
-        error_log("✅ Appointment booked successfully - ID: $appointmentId, Email: $userEmail, Doctor: " . $appointment['doctor_name']);
+        error_log("✅ Appointment booked successfully - ID: $appointmentId, Email: $userEmail, Doctor ID: $doctorId, Doctor Name: " . $appointment['doctor_name']);
         
         $insertStmt->close();
         $conn->close();
@@ -322,11 +377,15 @@ if ($insertStmt->execute()) {
             'message' => 'Appointment booked successfully',
             'appointment' => [
                 'id' => (int)$appointment['id'],
+                'appointment_id' => $appointment['appointment_id'] ?? (string)$appointment['id'],
+                'patient_name' => $appointment['patient_name'] ?? null,
+                'patient_email' => $appointment['patient_email'] ?? $appointment['user_email'],
                 'user_email' => $appointment['user_email'],
                 'doctor_id' => (int)$appointment['doctor_id'],
                 'doctor_name' => $appointment['doctor_name'],
                 'doctor_specialization' => $appointment['doctor_specialization'],
                 'location' => $appointment['location'],
+                'hospital' => $appointment['location'],
                 'appointment_date' => $appointment['appointment_date'],
                 'appointment_time' => $appointment['appointment_time'],
                 'appointment_time_display' => $time12Hour,

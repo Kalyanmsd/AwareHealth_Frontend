@@ -365,15 +365,403 @@ fun ChatWindowScreen(
                             inputText = ""
                             errorMessage = null
                             
-                            // Send to chatbot API (single request, render exactly as returned)
+                            // Send to API - Try AI symptom checker first, then fallback to regular chatbot
                             scope.launch {
-                                val chatResponse = viewModel.sendMessage(
+                                // Try AI symptom checker first
+                                val (chatResponse, symptomResponse) = viewModel.sendMessageWithAI(
                                     message = userInput,
                                     conversationId = uiState.conversationId
                                 )
                                 
-                                if (chatResponse != null && chatResponse.success) {
-                                    // Render exactly what backend returns (single bubble)
+                                if (symptomResponse != null && symptomResponse.success) {
+                                    val conversationState = symptomResponse.conversation_state
+                                    
+                                    // Track conversation progress to enforce correct flow (strict validation)
+                                    val hasShownSymptoms = messages.any { it.symptoms != null && it.symptoms.isNotEmpty() }
+                                    val hasAskedPrevention = messages.any { it.text.contains("Can I provide prevention tips", ignoreCase = true) }
+                                    val hasShownPrevention = messages.any { it.preventionTips != null && it.preventionTips.isNotEmpty() }
+                                    val hasAskedFood = messages.any { it.text.contains("Can I provide food recommendations", ignoreCase = true) }
+                                    val hasShownFood = messages.any { it.foodRecommendations != null && it.foodRecommendations.isNotEmpty() }
+                                    val hasAskedDays = messages.any { it.text.contains("how many days", ignoreCase = true) || it.text.contains("suffering from", ignoreCase = true) }
+                                    
+                                    // CRITICAL: If backend sends wrong state (e.g., asking_food before prevention), fix it
+                                    // Enforce strict flow: symptoms -> prevention question -> prevention tips -> food question -> food recommendations -> days question
+                                    if (conversationState == "asking_food" && !hasShownSymptoms) {
+                                        // Backend skipped to food question - force correct flow
+                                        if (symptomResponse.symptoms?.isNotEmpty() == true) {
+                                            messages.add(
+                                                ChatMessage(
+                                                    id = (System.currentTimeMillis() + 1).toString(),
+                                                    text = "Here are the symptoms of ${symptomResponse.disease_name ?: "this disease"}:",
+                                                    sender = "bot",
+                                                    time = "Now",
+                                                    symptoms = symptomResponse.symptoms,
+                                                    preventionTips = null,
+                                                    foodRecommendations = null
+                                                )
+                                            )
+                                            kotlinx.coroutines.delay(300)
+                                            messages.add(
+                                                ChatMessage(
+                                                    id = (System.currentTimeMillis() + 2).toString(),
+                                                    text = "Can I provide prevention tips?",
+                                                    sender = "bot",
+                                                    time = "Now",
+                                                    symptoms = null,
+                                                    preventionTips = null,
+                                                    foodRecommendations = null
+                                                )
+                                            )
+                                        }
+                                        return@launch
+                                    }
+                                    
+                                    // Handle different conversation states separately
+                                    when (conversationState) {
+                                        "waiting_for_disease" -> {
+                                            // User just entered disease name - show ONLY symptoms (strict rule: nothing else)
+                                            // Enforce: Only show symptoms, nothing else
+                                            if (!hasShownSymptoms && symptomResponse.symptoms?.isNotEmpty() == true) {
+                                                messages.add(
+                                                    ChatMessage(
+                                                        id = (System.currentTimeMillis() + 1).toString(),
+                                                        text = "Here are the symptoms of ${symptomResponse.disease_name ?: "this disease"}:",
+                                                        sender = "bot",
+                                                        time = "Now",
+                                                        symptoms = symptomResponse.symptoms,
+                                                        preventionTips = null,
+                                                        foodRecommendations = null
+                                                    )
+                                                )
+                                                
+                                                // After showing symptoms, ask about prevention tips (one by one)
+                                                kotlinx.coroutines.delay(300)
+                                                messages.add(
+                                                    ChatMessage(
+                                                        id = (System.currentTimeMillis() + 2).toString(),
+                                                        text = "Can I provide prevention tips?",
+                                                        sender = "bot",
+                                                        time = "Now",
+                                                        symptoms = null,
+                                                        preventionTips = null,
+                                                        foodRecommendations = null
+                                                    )
+                                                )
+                                            }
+                                        }
+                                        
+                                        "asking_prevention" -> {
+                                            // User responded to prevention tips question
+                                            // Enforce correct flow: Must have shown symptoms and asked prevention question first
+                                            if (!hasShownSymptoms) {
+                                                // Backend skipped symptoms - show them first
+                                                if (symptomResponse.symptoms?.isNotEmpty() == true) {
+                                                    messages.add(
+                                                        ChatMessage(
+                                                            id = (System.currentTimeMillis() + 1).toString(),
+                                                            text = "Here are the symptoms of ${symptomResponse.disease_name ?: "this disease"}:",
+                                                            sender = "bot",
+                                                            time = "Now",
+                                                            symptoms = symptomResponse.symptoms,
+                                                            preventionTips = null,
+                                                            foodRecommendations = null
+                                                        )
+                                                    )
+                                                    kotlinx.coroutines.delay(300)
+                                                    messages.add(
+                                                        ChatMessage(
+                                                            id = (System.currentTimeMillis() + 2).toString(),
+                                                            text = "Can I provide prevention tips?",
+                                                            sender = "bot",
+                                                            time = "Now",
+                                                            symptoms = null,
+                                                            preventionTips = null,
+                                                            foodRecommendations = null
+                                                        )
+                                                    )
+                                                }
+                                                return@launch
+                                            }
+                                            
+                                            // Strict rule: Only show prevention tips if user said yes/provide/okay/sure/fine
+                                            if (symptomResponse.prevention_tips?.isNotEmpty() == true && !hasShownPrevention) {
+                                                // User confirmed - show ONLY prevention tips (no mixing with food)
+                                                messages.add(
+                                                    ChatMessage(
+                                                        id = (System.currentTimeMillis() + 1).toString(),
+                                                        text = "Here are the prevention tips:",
+                                                        sender = "bot",
+                                                        time = "Now",
+                                                        symptoms = null,
+                                                        preventionTips = symptomResponse.prevention_tips,
+                                                        foodRecommendations = null
+                                                    )
+                                                )
+                                                kotlinx.coroutines.delay(300)
+                                            }
+                                            
+                                            // After prevention tips (or after user said no), ask about food recommendations
+                                            // Strict rule: Ask questions one by one, don't mix
+                                            // Only ask if we haven't asked already and we've shown prevention (or user said no)
+                                            if (!hasAskedFood) {
+                                                messages.add(
+                                                    ChatMessage(
+                                                        id = (System.currentTimeMillis() + 2).toString(),
+                                                        text = "Can I provide food recommendations?",
+                                                        sender = "bot",
+                                                        time = "Now",
+                                                        symptoms = null,
+                                                        preventionTips = null,
+                                                        foodRecommendations = null
+                                                    )
+                                                )
+                                            }
+                                        }
+                                        
+                                        "asking_food" -> {
+                                            // User responded to food recommendations question
+                                            // CRITICAL FIX: Backend might send BOTH prevention_tips AND food_recommendations in same response
+                                            // This causes them to appear in same message bubble - we must prevent this!
+                                            val hasBothPreventionAndFood = symptomResponse.prevention_tips?.isNotEmpty() == true && 
+                                                                          symptomResponse.food_recommendations?.isNotEmpty() == true
+                                            
+                                            if (hasBothPreventionAndFood) {
+                                                // Backend sent BOTH - this causes the bug where both appear in same message
+                                                // Fix: Show ONLY food recommendations here (ignore prevention_tips)
+                                                // Prevention tips should have been shown earlier when user confirmed prevention question
+                                                if (!hasShownFood) {
+                                                    messages.add(
+                                                        ChatMessage(
+                                                            id = (System.currentTimeMillis() + 1).toString(),
+                                                            text = "Here are the food recommendations:",
+                                                            sender = "bot",
+                                                            time = "Now",
+                                                            symptoms = null,
+                                                            preventionTips = null, // CRITICAL: Ignore prevention_tips - show only food
+                                                            foodRecommendations = symptomResponse.food_recommendations
+                                                        )
+                                                    )
+                                                    kotlinx.coroutines.delay(300)
+                                                }
+                                                
+                                                // Ask days question
+                                                if (!hasAskedDays) {
+                                                    messages.add(
+                                                        ChatMessage(
+                                                            id = (System.currentTimeMillis() + 2).toString(),
+                                                            text = "From how many days are you suffering from this disease?",
+                                                            sender = "bot",
+                                                            time = "Now",
+                                                            symptoms = null,
+                                                            preventionTips = null,
+                                                            foodRecommendations = null
+                                                        )
+                                                    )
+                                                }
+                                                return@launch
+                                            }
+                                            
+                                            // Check if backend sent prevention_tips when it should send food_recommendations
+                                            val hasPreventionInFoodState = symptomResponse.prevention_tips?.isNotEmpty() == true && 
+                                                                          (symptomResponse.food_recommendations == null || symptomResponse.food_recommendations.isEmpty())
+                                            
+                                            if (hasPreventionInFoodState) {
+                                                // Backend sent wrong data - it sent prevention tips when we're in food state
+                                                // This is the bug shown in the image - backend shows prevention tips when user says yes to food
+                                                // Fix: Ignore prevention_tips in this state, only show food_recommendations
+                                                // If no food_recommendations, don't show anything, just ask days
+                                                if (symptomResponse.food_recommendations?.isNotEmpty() == true && !hasShownFood) {
+                                                    messages.add(
+                                                        ChatMessage(
+                                                            id = (System.currentTimeMillis() + 1).toString(),
+                                                            text = "Here are the food recommendations:",
+                                                            sender = "bot",
+                                                            time = "Now",
+                                                            symptoms = null,
+                                                            preventionTips = null, // CRITICAL: Don't show prevention_tips here
+                                                            foodRecommendations = symptomResponse.food_recommendations
+                                                        )
+                                                    )
+                                                    kotlinx.coroutines.delay(300)
+                                                }
+                                                
+                                                // Ask days question
+                                                if (!hasAskedDays) {
+                                                    messages.add(
+                                                        ChatMessage(
+                                                            id = (System.currentTimeMillis() + 2).toString(),
+                                                            text = "From how many days are you suffering from this disease?",
+                                                            sender = "bot",
+                                                            time = "Now",
+                                                            symptoms = null,
+                                                            preventionTips = null,
+                                                            foodRecommendations = null
+                                                        )
+                                                    )
+                                                }
+                                                return@launch
+                                            }
+                                            
+                                            // Normal flow: Only show food recommendations if user said yes/okay/sure (permission given)
+                                            if (symptomResponse.food_recommendations?.isNotEmpty() == true && !hasShownFood) {
+                                                // User confirmed - show ONLY food recommendations (no mixing with prevention)
+                                                messages.add(
+                                                    ChatMessage(
+                                                        id = (System.currentTimeMillis() + 1).toString(),
+                                                        text = "Here are the food recommendations:",
+                                                        sender = "bot",
+                                                        time = "Now",
+                                                        symptoms = null,
+                                                        preventionTips = null, // CRITICAL: Never show prevention tips in food state
+                                                        foodRecommendations = symptomResponse.food_recommendations
+                                                    )
+                                                )
+                                                kotlinx.coroutines.delay(300)
+                                            }
+                                            
+                                            // After food recommendations (or after user said no), ask about days
+                                            // Strict rule: Don't give hospital advice unless days are asked first
+                                            if (!hasAskedDays) {
+                                                messages.add(
+                                                    ChatMessage(
+                                                        id = (System.currentTimeMillis() + 2).toString(),
+                                                        text = "From how many days are you suffering from this disease?",
+                                                        sender = "bot",
+                                                        time = "Now",
+                                                        symptoms = null,
+                                                        preventionTips = null,
+                                                        foodRecommendations = null
+                                                    )
+                                                )
+                                            }
+                                        }
+                                        
+                                        "asking_days" -> {
+                                            // User said no to food recommendations - ask about days
+                                            // Extract days question from message or use default
+                                            val daysQuestion = symptomResponse.message?.takeIf { 
+                                                it.contains("days", ignoreCase = true) || 
+                                                it.contains("suffering", ignoreCase = true)
+                                            } ?: "From how many days are you suffering from this disease?"
+                                            
+                                            messages.add(
+                                                ChatMessage(
+                                                    id = (System.currentTimeMillis() + 1).toString(),
+                                                    text = daysQuestion,
+                                                    sender = "bot",
+                                                    time = "Now",
+                                                    symptoms = null,
+                                                    preventionTips = null,
+                                                    foodRecommendations = null
+                                                )
+                                            )
+                                        }
+                                        
+                                        "completed" -> {
+                                            // After days provided: Show response based on days
+                                            val days = symptomResponse.days_suffering
+                                            
+                                            if (days != null && days > 3) {
+                                                // More than 3 days: Always show hospital number to book appointment
+                                                val hospitalInfo = "\n\n🏥 Saveetha Hospital\n" +
+                                                    "📞 Phone: +91-44-2680 1580 / +91-44-2680 1581\n" +
+                                                    "📍 Location: Saveetha Nagar, Thandalam, Chennai - 602 105\n\n" +
+                                                    "Please call to book your appointment for immediate medical consultation."
+                                                
+                                                val messageText = if (symptomResponse.message != null && 
+                                                                      symptomResponse.message!!.contains("Saveetha", ignoreCase = true)) {
+                                                    // Flask already included hospital info
+                                                    symptomResponse.message
+                                                } else {
+                                                    // Add hospital info to Flask message or use default
+                                                    val baseMessage = symptomResponse.message ?: 
+                                                        "Since you've been suffering for $days days, please book an appointment:"
+                                                    baseMessage + hospitalInfo
+                                                }
+                                                
+                                                messages.add(
+                                                    ChatMessage(
+                                                        id = (System.currentTimeMillis() + 1).toString(),
+                                                        text = messageText,
+                                                        sender = "bot",
+                                                        time = "Now",
+                                                        symptoms = null,
+                                                        preventionTips = null,
+                                                        foodRecommendations = null
+                                                    )
+                                                )
+                                            } else {
+                                                // 3 days or less: Advise care and prevention tips
+                                                val messageText = symptomResponse.message ?: (
+                                                    "Since you've been suffering for $days day(s), take care of your health. Rest well, stay hydrated, and don't be alone - reach out to family or friends for support. If symptoms worsen, please consult a doctor."
+                                                )
+                                                
+                                                messages.add(
+                                                    ChatMessage(
+                                                        id = (System.currentTimeMillis() + 1).toString(),
+                                                        text = messageText,
+                                                        sender = "bot",
+                                                        time = "Now",
+                                                        symptoms = null,
+                                                        preventionTips = symptomResponse.prevention_tips,
+                                                        foodRecommendations = null
+                                                    )
+                                                )
+                                            }
+                                        }
+                                        
+                                        else -> {
+                                            // Fallback: Handle unknown states
+                                            // CRITICAL: NEVER mix prevention tips and food recommendations in one message
+                                            // They must be in separate messages, shown at appropriate times
+                                            
+                                            // First, show symptoms if available and not shown yet
+                                            if (!hasShownSymptoms && symptomResponse.symptoms?.isNotEmpty() == true) {
+                                                messages.add(
+                                                    ChatMessage(
+                                                        id = (System.currentTimeMillis() + 1).toString(),
+                                                        text = "Here are the symptoms of ${symptomResponse.disease_name ?: "this disease"}:",
+                                                        sender = "bot",
+                                                        time = "Now",
+                                                        symptoms = symptomResponse.symptoms,
+                                                        preventionTips = null,
+                                                        foodRecommendations = null
+                                                    )
+                                                )
+                                                kotlinx.coroutines.delay(300)
+                                                
+                                                // Then ask prevention question
+                                                if (!hasAskedPrevention) {
+                                                    messages.add(
+                                                        ChatMessage(
+                                                            id = (System.currentTimeMillis() + 2).toString(),
+                                                            text = "Can I provide prevention tips?",
+                                                            sender = "bot",
+                                                            time = "Now",
+                                                            symptoms = null,
+                                                            preventionTips = null,
+                                                            foodRecommendations = null
+                                                        )
+                                                    )
+                                                }
+                                            } else {
+                                                // Just show the message if no symptoms
+                                                messages.add(
+                                                    ChatMessage(
+                                                        id = (System.currentTimeMillis() + 1).toString(),
+                                                        text = symptomResponse.message ?: "I've analyzed your information.",
+                                                        sender = "bot",
+                                                        time = "Now",
+                                                        symptoms = null,
+                                                        preventionTips = null, // CRITICAL: Don't mix with food
+                                                        foodRecommendations = null // CRITICAL: Don't mix with prevention
+                                                    )
+                                                )
+                                            }
+                                        }
+                                    }
+                                } else if (chatResponse != null && chatResponse.success) {
+                                    // Regular chatbot responded
                                     messages.add(
                                         ChatMessage(
                                             id = (System.currentTimeMillis() + 1).toString(),
@@ -383,10 +771,28 @@ fun ChatWindowScreen(
                                         )
                                     )
                                 } else {
+                                    // Show error message with better troubleshooting
+                                    val errorMsg = when {
+                                        uiState.error != null -> {
+                                            // Use error from ViewModel (includes Flask API or PHP API errors)
+                                            uiState.error!!
+                                        }
+                                        chatResponse != null && !chatResponse.success -> {
+                                            // Server returned error response
+                                            chatResponse.response
+                                        }
+                                        symptomResponse != null && !symptomResponse.success -> {
+                                            // Flask API error
+                                            val flaskUrl = com.example.awarehealth.data.RetrofitClient.FLASK_BASE_URL_PUBLIC
+                                            "Cannot connect to AI service.\n\nPlease check:\n1. Flask API is running (python flask_api.py)\n2. Phone and computer on same Wi-Fi\n3. Test: ${flaskUrl}health in phone browser\n4. Or use regular chatbot (fallback)"
+                                        }
+                                        else -> {
+                                            // Generic fallback with helpful info
                                             val baseUrl = com.example.awarehealth.data.RetrofitClient.BASE_URL_PUBLIC
-                                    val errorMsg = uiState.error
-                                        ?: chatResponse?.response
-                                        ?: "Unable to connect to server.\n\nPlease check:\n1. XAMPP Apache is running (port 80)\n2. Flask API is running (port 5000)\n3. Phone and computer on same Wi-Fi\n4. Test PHP: ${baseUrl}test_connection.php"
+                                            val flaskUrl = com.example.awarehealth.data.RetrofitClient.FLASK_BASE_URL_PUBLIC
+                                            "Unable to connect to server.\n\nPlease check:\n1. XAMPP Apache is running (port 80)\n2. Flask API is running (port 5000)\n3. Phone and computer on same Wi-Fi\n4. Test PHP: ${baseUrl}test_connection.php\n5. Test Flask: ${flaskUrl}health"
+                                        }
+                                    }
                                     
                                     messages.add(
                                         ChatMessage(

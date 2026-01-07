@@ -19,6 +19,7 @@ sealed class Screen(val route: String) {
     object PatientHome : Screen("patient_home")
     object PatientMenu : Screen("patient_menu")
     object PatientProfile : Screen("patient_profile")
+    object EditPatientProfile : Screen("edit_patient_profile")
     
     // Appointments
     object SelectDoctor : Screen("select_doctor")

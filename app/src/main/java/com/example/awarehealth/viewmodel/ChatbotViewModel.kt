@@ -179,44 +179,41 @@ class ChatbotViewModel(private val repository: AppRepository) : ViewModel() {
                     )
                     symptomResponse
                 } else {
+                    // Flask returned success=false (unrelated query or error)
+                    // Don't set error - silently fallback to PHP chatbot
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        error = symptomResponse.error ?: "Failed to analyze symptoms"
+                        error = null  // Clear error to allow fallback
                     )
                     null
                 }
             } else {
-                val errorMsg = "Unable to connect to AI symptom checker. Please try again."
+                // Flask API returned error response - silently fallback to PHP chatbot
+                // Don't set error message, let PHP chatbot handle it
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    error = errorMsg
+                    error = null  // Clear error to allow fallback
                 )
                 null
             }
         } catch (e: Exception) {
-            Log.e("ChatbotViewModel", "Error checking symptoms", e)
-            val flaskUrl = RetrofitClient.FLASK_BASE_URL_PUBLIC
-            val testUrl = "${flaskUrl}health"
-            
-            val errorMsg = when {
-                e.message?.contains("Failed to connect", ignoreCase = true) == true ||
-                e.message?.contains("Connection refused", ignoreCase = true) == true ||
-                e.message?.contains("Connection timed out", ignoreCase = true) == true ||
-                e is java.net.ConnectException ||
-                e is java.net.SocketTimeoutException ->
-                    "Cannot connect to AI service.\n\nPlease check:\n1. Flask API is running (python flask_api.py)\n2. Phone and computer on same Wi-Fi\n3. Test: $testUrl in phone browser"
-                else -> "Error analyzing symptoms: ${e.message ?: "Unknown error"}"
-            }
+            // Flask API error - silently fallback to PHP chatbot
+            // Don't show error message, let PHP chatbot handle the query
+            Log.w("ChatbotViewModel", "Flask API error, falling back to PHP chatbot", e)
             _uiState.value = _uiState.value.copy(
                 isLoading = false,
-                error = errorMsg
+                error = null  // Clear error to allow fallback
             )
             null
         }
     }
     
     /**
-     * Send message - tries AI symptom checker first, falls back to regular chatbot
+     * Send message - tries AI symptom checker (Flask) first, falls back to regular PHP chatbot.
+     *
+     * Safety rules:
+     * - Never crash the app if Flask is down.
+     * - If Flask is not reachable (health check fails), skip it immediately and use PHP chatbot.
      */
     suspend fun sendMessageWithAI(
         message: String,
@@ -234,15 +231,31 @@ class ChatbotViewModel(private val repository: AppRepository) : ViewModel() {
         var flaskFailed = false
         
         try {
-            // Temporarily disable error setting in checkSymptoms by catching and handling
-            val originalError = _uiState.value.error
-            symptomResponse = checkSymptoms(message, symptomConvId)
-            
-            // If checkSymptoms set an error, we'll handle it in fallback
-            if (_uiState.value.error != null && symptomResponse == null) {
+            // Quick health check before calling heavy Flask endpoints.
+            // If this fails, we immediately skip Flask and fall back to PHP chatbot.
+            try {
+                val healthResponse = repository.checkFlaskHealth()
+                val healthOk = healthResponse?.isSuccessful == true
+                if (!healthOk) {
+                    Log.w("ChatbotViewModel", "Flask health check failed (code=${healthResponse?.code()}) - using PHP chatbot only")
+                    flaskFailed = true
+                }
+            } catch (healthEx: Exception) {
+                Log.w("ChatbotViewModel", "Flask health check threw exception, skipping Flask", healthEx)
                 flaskFailed = true
             }
+            
+            if (!flaskFailed) {
+                // Only call Flask symptom checker if health check passed
+                symptomResponse = checkSymptoms(message, symptomConvId)
+                
+                // If Flask returns null (error or unrelated query), mark as failed to use PHP fallback
+                if (symptomResponse == null) {
+                    flaskFailed = true
+                }
+            }
         } catch (e: Exception) {
+            // Any unexpected error from Flask path should never crash the app
             Log.w("ChatbotViewModel", "Flask API failed, falling back to PHP chatbot", e)
             flaskFailed = true
             symptomResponse = null
@@ -265,19 +278,16 @@ class ChatbotViewModel(private val repository: AppRepository) : ViewModel() {
                     _uiState.value = _uiState.value.copy(error = null, isLoading = false)
                     return Pair(chatResponse, null)
                 } else {
-                    // PHP chatbot also failed
+                    // PHP chatbot also failed - only show error if both Flask and PHP failed
                     val baseUrl = RetrofitClient.BASE_URL_PUBLIC
                     val flaskUrl = RetrofitClient.FLASK_BASE_URL_PUBLIC
-                    val errorMsg = if (flaskFailed) {
-                        "Unable to connect to server.\n\nPlease check:\n1. XAMPP Apache is running (port 80)\n2. Flask API is running (port 5000)\n3. Phone and computer on same Wi-Fi\n4. Test PHP: ${baseUrl}test_connection.php\n5. Test Flask: ${flaskUrl}health"
-                    } else {
-                        chatResponse?.response ?: "Unable to connect to server. Please check your connection."
-                    }
+                    val errorMsg = "Unable to connect to server.\n\nPlease check:\n1. XAMPP Apache is running (port 80)\n2. Flask API is running (port 5000)\n3. Phone and computer on same Wi-Fi\n4. Test PHP: ${baseUrl}test_connection.php\n5. Test Flask: ${flaskUrl}health"
                     _uiState.value = _uiState.value.copy(error = errorMsg, isLoading = false)
                     return Pair(chatResponse, symptomResponse)
                 }
             } catch (e: Exception) {
-                // Both Flask and PHP failed - show comprehensive error
+                // PHP chatbot failed - show error only if both Flask and PHP failed
+                Log.e("ChatbotViewModel", "PHP chatbot also failed", e)
                 val baseUrl = RetrofitClient.BASE_URL_PUBLIC
                 val flaskUrl = RetrofitClient.FLASK_BASE_URL_PUBLIC
                 val errorMsg = "Unable to connect to server.\n\nPlease check:\n1. XAMPP Apache is running (port 80)\n2. Flask API is running (port 5000)\n3. Phone and computer on same Wi-Fi\n4. Test PHP: ${baseUrl}test_connection.php\n5. Test Flask: ${flaskUrl}health"

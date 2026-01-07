@@ -2,6 +2,7 @@ package com.example.awarehealth.ui.screens
 
 /* ---------- IMPORTS ---------- */
 
+import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -20,13 +21,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip   // ✅ FIXED
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.awarehealth.data.AppRepository
+import com.example.awarehealth.data.SharedPreferencesHelper
 import com.example.awarehealth.viewmodel.AuthViewModel
+import kotlinx.coroutines.delay
 
 /* ---------- SCREEN ---------- */
 
@@ -39,6 +43,10 @@ fun LoginScreen(
     onForgotPassword: () -> Unit,
     onBack: () -> Unit = {}
 ) {
+    // Get context for SharedPreferences
+    val context = LocalContext.current
+    val prefsHelper = remember { SharedPreferencesHelper(context) }
+    
     // Initialize ViewModel
     val viewModel: AuthViewModel = remember { AuthViewModel(repository) }
     val uiState by viewModel.uiState.collectAsState()
@@ -46,12 +54,58 @@ fun LoginScreen(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
+    var rememberMe by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
+    var autoLoginAttempted by remember { mutableStateOf(false) }
 
     // Handle back button
     BackHandler {
         onBack()
+    }
+    
+    // Auto-fill credentials and auto-login on first load
+    LaunchedEffect(userType) {
+        if (!autoLoginAttempted) {
+            autoLoginAttempted = true
+            
+            // Check if credentials are saved for this user type
+            val savedEmail = prefsHelper.getSavedEmail(userType)
+            val savedPassword = prefsHelper.getSavedPassword(userType)
+            
+            if (!savedEmail.isNullOrEmpty() && !savedPassword.isNullOrEmpty()) {
+                // Auto-fill credentials
+                email = savedEmail
+                password = savedPassword
+                rememberMe = prefsHelper.isRememberMeEnabled()
+                
+                // Auto-login after a short delay
+                delay(500)
+                if (email.isNotBlank() && password.isNotBlank()) {
+                    viewModel.login(
+                        email = email,
+                        password = password,
+                        userType = userType,
+                        onSuccess = { user ->
+                            // Save doctorId if user is a doctor
+                            if (userType == "doctor" && user.doctorId != null) {
+                                prefsHelper.saveDoctorId(user.doctorId)
+                            }
+                            
+                            // Save credentials if Remember Me is enabled
+                            if (rememberMe) {
+                                prefsHelper.saveCredentials(email, password, userType, true)
+                                prefsHelper.saveUserSession(user)
+                            }
+                            // Navigation handled in LaunchedEffect
+                        },
+                        onError = { error ->
+                            errorMessage = error
+                        }
+                    )
+                }
+            }
+        }
     }
     
     // Observe UI state changes
@@ -62,7 +116,22 @@ fun LoginScreen(
             viewModel.clearError()
         }
         if (uiState.isSuccess && uiState.user != null) {
-            onLoginSuccess(uiState.user!!)
+            val loggedInUser = uiState.user!!
+            
+            // Save doctorId if user is a doctor
+            if (userType == "doctor" && loggedInUser.doctorId != null) {
+                prefsHelper.saveDoctorId(loggedInUser.doctorId)
+            }
+            
+            // Save credentials if Remember Me is checked
+            if (rememberMe) {
+                prefsHelper.saveCredentials(email, password, userType, true)
+                prefsHelper.saveUserSession(loggedInUser)
+            } else {
+                // Clear saved credentials if Remember Me is unchecked
+                prefsHelper.clearCredentials(userType)
+            }
+            onLoginSuccess(loggedInUser)
         }
     }
 
@@ -244,17 +313,51 @@ fun LoginScreen(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        /* ---------- FORGOT PASSWORD ---------- */
-        Text(
-            text = "Forgot Password?",
-            modifier = Modifier
-                .align(Alignment.End)
-                .clickable { onForgotPassword() }
-                .padding(vertical = 4.dp, horizontal = 4.dp),
-            color = Color(0xFF4A5568),
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium
-        )
+        /* ---------- REMEMBER ME & FORGOT PASSWORD ---------- */
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Remember Me checkbox
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.clickable {
+                    rememberMe = !rememberMe
+                }
+            ) {
+                Checkbox(
+                    checked = rememberMe,
+                    onCheckedChange = { rememberMe = it },
+                    colors = CheckboxDefaults.colors(
+                        checkedColor = Color(0xFFAEE4C1),
+                        uncheckedColor = Color(0xFFE2E8F0),
+                        checkmarkColor = Color(0xFF2D3748)
+                    )
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "Remember Me",
+                    fontSize = 14.sp,
+                    color = Color(0xFF4A5568),
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.clickable {
+                        rememberMe = !rememberMe
+                    }
+                )
+            }
+            
+            // Forgot Password
+            Text(
+                text = "Forgot Password?",
+                modifier = Modifier
+                    .clickable { onForgotPassword() }
+                    .padding(vertical = 4.dp, horizontal = 4.dp),
+                color = Color(0xFF4A5568),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
 
         Spacer(modifier = Modifier.height(20.dp))
         
@@ -308,6 +411,14 @@ fun LoginScreen(
                         password = password,
                         userType = userType,
                         onSuccess = { user ->
+                            // Save credentials if Remember Me is checked
+                            if (rememberMe) {
+                                prefsHelper.saveCredentials(email, password, userType, true)
+                                prefsHelper.saveUserSession(user)
+                            } else {
+                                // Clear saved credentials if Remember Me is unchecked
+                                prefsHelper.clearCredentials(userType)
+                            }
                             // Navigation handled in LaunchedEffect
                         },
                         onError = { error ->

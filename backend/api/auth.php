@@ -31,6 +31,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 $segments = getPathSegments();
 $method = $_SERVER['REQUEST_METHOD'];
 
+// Also check PATH_INFO for endpoint (when accessing auth.php/update-profile)
+$pathInfo = $_SERVER['PATH_INFO'] ?? '';
+if (!empty($pathInfo)) {
+    $pathInfo = trim($pathInfo, '/');
+    $pathSegments = $pathInfo ? explode('/', $pathInfo) : [];
+    if (!empty($pathSegments)) {
+        $segments = array_merge($segments, $pathSegments);
+    }
+}
+
+// Debug logging
+error_log("Auth API - Request URI: " . ($_SERVER['REQUEST_URI'] ?? ''));
+error_log("Auth API - PATH_INFO: " . ($_SERVER['PATH_INFO'] ?? ''));
+error_log("Auth API - Path segments: " . json_encode($segments));
+error_log("Auth API - Method: " . $method);
+
 // Get database connection
 try {
     $conn = getDB();
@@ -47,7 +63,45 @@ $input = getJsonInput();
 
 switch ($method) {
     case 'POST':
+        // Extract endpoint from path segments
+        // URL: /AwareHealth/api/auth.php/update-profile -> segments: ['auth.php', 'update-profile']
+        // URL: /AwareHealth/api/auth/update-profile -> segments: ['auth', 'update-profile']
+        $endpoint = '';
+        
+        // First try: Check PATH_INFO (for auth.php/update-profile format)
+        if (!empty($_SERVER['PATH_INFO'])) {
+            $pathInfo = trim($_SERVER['PATH_INFO'], '/');
+            $pathParts = explode('/', $pathInfo);
+            if (!empty($pathParts[0])) {
+                $endpoint = $pathParts[0];
+            }
+        }
+        
+        // Second try: Check segments array
+        if (empty($endpoint)) {
+            // If segments[0] is 'auth.php' or 'auth', use segments[1]
+            if (count($segments) > 1 && ($segments[0] === 'auth.php' || $segments[0] === 'auth')) {
         $endpoint = $segments[1] ?? '';
+            } elseif (count($segments) > 0) {
+                // Otherwise, find first segment that's not 'auth.php' or 'auth'
+                foreach ($segments as $segment) {
+                    if ($segment !== 'auth.php' && $segment !== 'auth' && !empty($segment)) {
+                        $endpoint = $segment;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Fallback: use segments[1] directly
+        if (empty($endpoint) && isset($segments[1])) {
+            $endpoint = $segments[1];
+        }
+        
+        error_log("Auth API - REQUEST_URI: " . ($_SERVER['REQUEST_URI'] ?? ''));
+        error_log("Auth API - PATH_INFO: " . ($_SERVER['PATH_INFO'] ?? ''));
+        error_log("Auth API - Segments: " . json_encode($segments));
+        error_log("Auth API - Resolved endpoint: '$endpoint'");
         
         switch ($endpoint) {
             case 'register':
@@ -267,8 +321,8 @@ switch ($method) {
                     'token' => base64_encode($doctor['user_id']),
                     'user' => [
                         'id' => $doctor['user_id'],
-                        'doctorId' => $doctor['doctor_table_id'], // Use doctor table id
-                        'doctorIdShort' => $doctor['doctor_id'] ?? $doctor['doctor_table_id'], // Short ID if available
+                        'doctorId' => (string)$doctor['doctor_table_id'], // Use doctor table id (INT converted to string)
+                        'doctorIdShort' => $doctor['doctor_id'] ?? (string)$doctor['doctor_table_id'], // Short ID if available
                         'name' => $doctor['name'],
                         'email' => $doctor['email'],
                         'userType' => 'doctor',
@@ -965,6 +1019,90 @@ switch ($method) {
                     error_log("❌ Password reset failed: " . $error);
                     ob_end_clean();
                     sendResponse(500, ['success' => false, 'message' => 'Password reset failed: ' . $error]);
+                }
+                break;
+                
+            case 'update-profile':
+                // Update user profile
+                $required = ['userId', 'name', 'email', 'phone'];
+                $missing = validateRequired($input, $required);
+                
+                if (!empty($missing)) {
+                    ob_end_clean();
+                    sendResponse(400, ['success' => false, 'message' => 'Missing required fields: ' . implode(', ', $missing)]);
+                }
+                
+                $userId = sanitizeInput($input['userId']);
+                $name = sanitizeInput($input['name']);
+                $email = sanitizeInput($input['email']);
+                $phone = sanitizeInput($input['phone']);
+                
+                // Check if email is already taken by another user
+                $checkEmail = $conn->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
+                if (!$checkEmail) {
+                    ob_end_clean();
+                    sendResponse(500, ['success' => false, 'message' => 'Database error: ' . $conn->error]);
+                }
+                
+                $checkEmail->bind_param("ss", $email, $userId);
+                if (!$checkEmail->execute()) {
+                    $checkEmail->close();
+                    ob_end_clean();
+                    sendResponse(500, ['success' => false, 'message' => 'Database error: ' . $checkEmail->error]);
+                }
+                
+                $emailResult = $checkEmail->get_result();
+                if ($emailResult->num_rows > 0) {
+                    $checkEmail->close();
+                    ob_end_clean();
+                    sendResponse(400, ['success' => false, 'message' => 'Email already in use by another account']);
+                }
+                $checkEmail->close();
+                
+                // Update user profile
+                $updateStmt = $conn->prepare("UPDATE users SET name = ?, email = ?, phone = ? WHERE id = ?");
+                if (!$updateStmt) {
+                    ob_end_clean();
+                    sendResponse(500, ['success' => false, 'message' => 'Database error: ' . $conn->error]);
+                }
+                
+                $updateStmt->bind_param("ssss", $name, $email, $phone, $userId);
+                
+                if ($updateStmt->execute()) {
+                    // Get updated user data
+                    $selectStmt = $conn->prepare("SELECT id, name, email, user_type, phone FROM users WHERE id = ?");
+                    $selectStmt->bind_param("s", $userId);
+                    $selectStmt->execute();
+                    $result = $selectStmt->get_result();
+                    
+                    if ($result->num_rows > 0) {
+                        $userRow = $result->fetch_assoc();
+                        $updateStmt->close();
+                        $selectStmt->close();
+                        
+                        ob_end_clean();
+                        sendResponse(200, [
+                            'success' => true,
+                            'message' => 'Profile updated successfully',
+                            'user' => [
+                                'id' => $userRow['id'],
+                                'name' => $userRow['name'],
+                                'email' => $userRow['email'],
+                                'userType' => $userRow['user_type'],
+                                'phone' => $userRow['phone']
+                            ]
+                        ]);
+                    } else {
+                        $updateStmt->close();
+                        $selectStmt->close();
+                        ob_end_clean();
+                        sendResponse(404, ['success' => false, 'message' => 'User not found']);
+                    }
+                } else {
+                    $error = $updateStmt->error;
+                    $updateStmt->close();
+                    ob_end_clean();
+                    sendResponse(500, ['success' => false, 'message' => 'Failed to update profile: ' . $error]);
                 }
                 break;
                 

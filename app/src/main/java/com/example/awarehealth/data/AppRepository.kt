@@ -17,6 +17,7 @@ class AppRepository(
     suspend fun verifyOTP(request: VerifyOTPRequest) = apiService?.verifyOTP(request)
     suspend fun resetPassword(request: ResetPasswordRequest) = apiService?.resetPassword(request)
     suspend fun googleSignIn(request: GoogleSignInRequest) = apiService?.googleSignIn(request)
+    suspend fun updateProfile(request: UpdateProfileRequest) = apiService?.updateProfile(request)
     
     // OTP Login System (new endpoints)
     suspend fun sendOTP(request: SendOTPRequest) = apiService?.sendOTP(request)
@@ -27,10 +28,9 @@ class AppRepository(
     suspend fun getDoctorsList() = apiService?.getDoctorsList()
     suspend fun bookAppointment(request: BookAppointmentRequest) = apiService?.bookAppointment(request)
     suspend fun getMyAppointments(email: String) = apiService?.getMyAppointments(email)
+    suspend fun getDoctorAppointments(doctorId: String) = apiService?.getDoctorAppointments(doctorId)
     
-    // AI Symptom Checker (via PHP Proxy to Flask)
-    // Architecture: Android → PHP (chat.php) → Flask → PHP → Android
-    // This prevents direct Flask connection failures
-    suspend fun checkSymptoms(message: String, conversationId: String? = null) = apiService?.sendAIChatMessage(SymptomRequest(message, conversationId))
-    suspend fun checkFlaskHealth() = flaskApiService?.checkHealth()  // Keep direct health check for testing
+    // AI Symptom Checker (Flask API)
+    suspend fun checkSymptoms(message: String, conversationId: String? = null) = flaskApiService?.checkSymptoms(SymptomRequest(message, conversationId))
+    suspend fun checkFlaskHealth() = flaskApiService?.checkHealth()
 }

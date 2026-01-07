@@ -10,49 +10,56 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.example.awarehealth.data.AppRepository
+import com.example.awarehealth.data.SharedPreferencesHelper
 import com.example.awarehealth.ui.components.Header
 import com.example.awarehealth.navigation.Screen
+import com.example.awarehealth.viewmodel.DoctorAppointmentsViewModel
 
 @Composable
-fun PendingRequests(navController: NavController) {
-    // Sample data matching the image
-    val pendingAppointments = listOf(
+fun PendingRequests(
+    navController: NavController,
+    repository: AppRepository
+) {
+    val context = LocalContext.current
+    val prefsHelper = remember { SharedPreferencesHelper(context) }
+    val viewModel: DoctorAppointmentsViewModel = viewModel { DoctorAppointmentsViewModel(repository) }
+    val uiState by viewModel.uiState.collectAsState()
+    
+    // Get doctor ID from SharedPreferences
+    val doctorId = remember { prefsHelper.getDoctorId() }
+    
+    // Fetch appointments when screen loads
+    LaunchedEffect(doctorId) {
+        if (!doctorId.isNullOrEmpty()) {
+            viewModel.fetchDoctorAppointments(doctorId)
+        }
+    }
+    
+    // Filter pending appointments
+    val pendingAppointments = uiState.appointments.filter { 
+        it.status?.lowercase() == "pending" 
+    }.map { appointmentData ->
         Appointment(
-            id = "1",
-            patientName = "John Smith",
-            patientId = "P001",
-            date = "2024-12-15",
-            time = "10:00 AM",
-            status = "pending",
-            symptoms = "Fever and headache"
-        ),
-        Appointment(
-            id = "2",
-            patientName = "Lisa Anderson",
-            patientId = "P005",
-            date = "2024-12-20",
-            time = "4:30 PM",
-            status = "pending",
-            symptoms = "Persistent cough and sore throat"
-        ),
-        Appointment(
-            id = "3",
-            patientName = "John Smith",
-            patientId = "P001",
-            date = "2024-12-22",
-            time = "2:00 PM",
-            status = "pending",
-            symptoms = "Annual health checkup"
+            id = appointmentData.id,
+            patientName = appointmentData.patientName ?: "Patient",
+            patientId = appointmentData.patientEmail ?: appointmentData.patientId ?: "",
+            date = appointmentData.date,
+            time = appointmentData.time,
+            status = appointmentData.status ?: "pending",
+            symptoms = appointmentData.reason
         )
-    )
+    }
 
     Column(
         modifier = Modifier
@@ -85,15 +92,55 @@ fun PendingRequests(navController: NavController) {
 
             // Subtitle
             Text(
-                text = "${pendingAppointments.size} appointment requests waiting",
+                text = if (uiState.isLoading) "Loading..." else "${pendingAppointments.size} appointment requests waiting",
                 fontSize = 14.sp,
                 color = Color(0xFF718096)
             )
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            // Loading State
+            if (uiState.isLoading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 40.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+            // Error State
+            else if (uiState.error != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 40.dp)
+                        .background(
+                            Color(0xFFFFE8E8),
+                            RoundedCornerShape(20.dp)
+                        )
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "Error loading appointments",
+                            fontSize = 16.sp,
+                            color = Color(0xFFE53935),
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = uiState.error ?: "Unknown error",
+                            fontSize = 14.sp,
+                            color = Color(0xFF718096)
+                        )
+                    }
+                }
+            }
             // Appointment Cards
-            if (pendingAppointments.isNotEmpty()) {
+            else if (pendingAppointments.isNotEmpty()) {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
